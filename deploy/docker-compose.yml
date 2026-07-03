@@ -16,8 +16,10 @@ services:
     restart: unless-stopped
 
     # The service needs direct hardware access:
-    #   * I2C bus /dev/i2c-1  -> Sequent Home Automation HAT + Sensirion SDP810
+    #   * I2C bus /dev/i2c-1  -> Sequent Home Automation HAT (opto inputs + ADC)
     #   * 1-Wire sysfs        -> DS18B20 temperature probes (host kernel w1 driver)
+    # (The Setra 265 pressure sensor is read through the HAT's ADC, so it needs no
+    #  device of its own.)
     # On a dedicated monitoring Pi, privileged mode is the simplest reliable way
     # to expose all three (I2C device, GPIO, and the /sys/bus/w1 tree). Tighten
     # later with explicit `devices:`/mounts if you prefer least-privilege.

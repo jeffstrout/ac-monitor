@@ -14,7 +14,8 @@ independently useful and testable.
 ## Phase 1 — Bench bring-up
 - Assemble Pi + HAT; enable I²C and 1-Wire.
 - Verify each DS18B20 enumerates under `/sys/bus/w1/devices` and record ROM ids.
-- Confirm the SDP810 responds at `0x25` via `i2cdetect`.
+- Confirm the Setra 265 reads a sane voltage on `AD1` (e.g. `ioplus 0 adcrd 1`) and
+  scales to a plausible inH₂O value; sanity-check zero vs. a known ΔP.
 - Confirm the sail switch reads on HAT opto input 1.
 - Deliverable: a `--selftest` script that prints one reading from every sensor.
 

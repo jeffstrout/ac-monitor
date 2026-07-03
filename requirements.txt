@@ -5,6 +5,6 @@ paho-mqtt          # MQTT client + Home Assistant discovery
 fastapi            # web dashboard + REST API (incl. /api/version)
 uvicorn[standard]  # ASGI server for FastAPI
 pyyaml             # config.yaml loading
-smbus2             # I2C access to the Sensirion SDP810 pressure sensor
-SMioplus           # Sequent Home Automation HAT driver (opto inputs)
+SMioplus           # Sequent Home Automation HAT driver (opto inputs + analog reads)
 # DS18B20 temps are read from /sys/bus/w1 — no library required.
+# Setra 265 pressure is read as an analog voltage via SMioplus — no extra library.

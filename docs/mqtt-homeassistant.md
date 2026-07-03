@@ -22,18 +22,17 @@ ac_monitor/
 ├── status                       # "online" / "offline"  (retained, LWT)
 ├── state                        # full SystemState as JSON (retained)
 ├── temperature/
-│   ├── return_air               # °C/°F
-│   ├── supply_air
-│   ├── coil
-│   └── spare
+│   ├── suction_line             # °C/°F  (refrigerant suction line)
+│   ├── liquid_line              #        (refrigerant liquid line)
+│   ├── input_air                #        (return air into the coil)
+│   └── output_air               #        (supply air out of the coil)
 ├── pressure/
-│   ├── pa                       # differential pressure, Pa
-│   ├── inh2o                    # differential pressure, inH2O
-│   └── sensor_temp              # SDP810 internal temp
+│   ├── inh2o                    # differential pressure, inH2O (Setra 265)
+│   └── volts                    # raw divided ADC volts (diagnostic)
 ├── airflow                      # "ON"/"OFF" (sail switch)
 └── derived/
-    ├── delta_t                  # return - supply
-    ├── filter_dp_pct            # optional, if a full-scale limit is configured
+    ├── delta_t                  # air-side ΔT = input_air - output_air
+    ├── filter_dp_pct            # optional, % of configured full-scale range
     └── fault/<name>             # "ON"/"OFF" per fault (no_airflow, high_filter_dp, ...)
 ```
 
@@ -41,14 +40,13 @@ ac_monitor/
 
 | Entity | HA type | Source topic | Device class / unit |
 |---|---|---|---|
-| Return Air Temp | sensor | `temperature/return_air` | `temperature` |
-| Supply Air Temp | sensor | `temperature/supply_air` | `temperature` |
-| Coil Temp | sensor | `temperature/coil` | `temperature` |
-| Spare Temp | sensor | `temperature/spare` | `temperature` |
-| Coil ΔT | sensor | `derived/delta_t` | `temperature` (Δ) |
-| Filter/Coil Pressure | sensor | `pressure/pa` | `pressure`, Pa |
+| Suction Line Temp | sensor | `temperature/suction_line` | `temperature` |
+| Liquid Line Temp | sensor | `temperature/liquid_line` | `temperature` |
+| Input Air Temp | sensor | `temperature/input_air` | `temperature` |
+| Output Air Temp | sensor | `temperature/output_air` | `temperature` |
+| Air ΔT | sensor | `derived/delta_t` | `temperature` (Δ) |
 | Filter/Coil Pressure | sensor | `pressure/inh2o` | (custom unit inH₂O) |
-| SDP810 Temp | sensor | `pressure/sensor_temp` | `temperature` |
+| Pressure Signal | sensor | `pressure/volts` | `voltage` (diagnostic) |
 | Airflow | binary_sensor | `airflow` | `running` / `moving` |
 | No-Airflow Fault | binary_sensor | `derived/fault/no_airflow` | `problem` |
 | High Filter ΔP | binary_sensor | `derived/fault/high_filter_dp` | `problem` |
@@ -60,13 +58,13 @@ ac_monitor/
 ## 4. Discovery payload example
 
 Published once at startup (retained) to
-`homeassistant/sensor/ac_monitor/return_air/config`:
+`homeassistant/sensor/ac_monitor/input_air/config`:
 
 ```json
 {
-  "name": "Return Air Temp",
-  "unique_id": "ac_monitor_return_air",
-  "state_topic": "ac_monitor/temperature/return_air",
+  "name": "Input Air Temp",
+  "unique_id": "ac_monitor_input_air",
+  "state_topic": "ac_monitor/temperature/input_air",
   "unit_of_measurement": "°F",
   "device_class": "temperature",
   "availability_topic": "ac_monitor/status",
@@ -96,10 +94,11 @@ And a binary sensor at `homeassistant/binary_sensor/ac_monitor/airflow/config`:
 
 ## 5. Suggested Home Assistant use
 
-- **Dashboard card** grouping temps + ΔT + airflow + filter ΔP.
+- **Dashboard card** grouping the four temps + air ΔT + airflow + filter ΔP.
 - **Automations / alerts:**
   - Filter ΔP over threshold → notify "change the air filter."
   - No airflow while a call is active *(once call signals exist)* → notify "possible
     blower/belt failure."
   - Abnormal cooling ΔT → notify "check charge / airflow."
+  - Warm suction line or very hot liquid line → notify "check refrigerant charge."
 - **History/graphing** comes for free once the entities exist.

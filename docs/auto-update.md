@@ -70,10 +70,10 @@ docker compose pull && docker compose up -d
 ## Hardware access note
 
 Unlike split-flap (pure software), AC Monitor talks to real hardware, so the
-container runs `privileged` to reach the I²C bus (`/dev/i2c-1`, used by both the
-HAT and the SDP810) and the host's `/sys/bus/w1` tree (DS18B20 probes). On a
-dedicated monitoring Pi this is an acceptable trade-off; it can be tightened to
-explicit `devices:`/bind-mounts later.
+container runs `privileged` to reach the I²C bus (`/dev/i2c-1`, the Sequent HAT —
+which also carries the Setra 265 pressure reading on its ADC) and the host's
+`/sys/bus/w1` tree (DS18B20 probes). On a dedicated monitoring Pi this is an
+acceptable trade-off; it can be tightened to explicit `devices:`/bind-mounts later.
 
 ## Status
 

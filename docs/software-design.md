@@ -23,7 +23,7 @@ no code exists yet.
 | Language | Python 3.11+ | Sequent ships a Python library; rich sensor ecosystem |
 | HAT opto inputs | Sequent `SMioplus` library | Official driver for the Home Automation HAT |
 | 1-Wire temps | Linux `w1` sysfs (`/sys/bus/w1/devices`) | Kernel-native, no extra driver |
-| Pressure sensor | `smbus2` (raw I²C) or `sensirion-i2c-sdp` | SDP810 is plain I²C |
+| Pressure sensor | Sequent `SMioplus` analog read (`AD1`) | Setra 265 0–5 V → HAT ADC (via divider) |
 | MQTT | `paho-mqtt` | De-facto standard, HA-friendly |
 | Web | FastAPI + Uvicorn | Async, tiny, serves API + static dashboard |
 | Config | YAML (`pyyaml`) | Human-editable sensor mapping/calibration |
@@ -41,7 +41,7 @@ ac_monitor/
 ├── config.py            # load & validate config.yaml -> typed settings
 ├── sensors/
 │   ├── onewire.py       # DS18B20 discovery + read by ROM id
-│   ├── pressure.py      # SDP810 I2C read (pressure + temp)
+│   ├── pressure.py      # Setra 265 analog read via HAT ADC -> volts -> inH2O
 │   └── digital.py       # HAT opto inputs (sail switch; future call signals)
 ├── core/
 │   ├── poller.py        # async loop; reads all sensors each tick
@@ -65,8 +65,8 @@ also what makes the [auto-update pipeline](auto-update.md) go live.
 ```
 Reading        = { key, value, unit, timestamp, healthy: bool }
 SystemState    = {
-    temps:     { return_air, supply_air, coil, spare }   # °C (or °F per config)
-    pressure_pa, pressure_inh2o, sensor_temp             # from SDP810
+    temps:     { suction_line, liquid_line, input_air, output_air }  # °C (or °F per config)
+    pressure_inh2o, pressure_volts                       # Setra 265 (volts = raw, diagnostic)
     airflow:   bool                                      # sail switch
     derived:   { delta_t, filter_loading_pct?, faults[] }
     updated_at
@@ -75,9 +75,11 @@ SystemState    = {
 
 ## 5. Derived metrics & fault logic
 
-- **Coil ΔT** = `return_air − supply_air`. The headline HVAC health number.
+- **Air-side ΔT** = `input_air − output_air`. The headline HVAC health number.
+- **Refrigerant line temps** = suction & liquid line readings — trend/fault indicators
+  (warm suction → low charge/airflow; very hot liquid → overcharge/dirty condenser).
 - **Airflow proof** = sail switch state (boolean).
-- **Filter/coil ΔP** = SDP810 reading, reported in Pa and inH₂O.
+- **Filter/coil ΔP** = Setra 265 reading, converted from ADC volts to inH₂O.
 - **Faults** (each a named boolean the dashboard/MQTT expose):
   - `no_airflow` — sail switch open for longer than a debounce window.
   - `airflow_no_call` *(enabled once thermostat signals are added)* — air moving but no
@@ -103,8 +105,10 @@ Thresholds live in `config.yaml` so they can be tuned to this specific system.
 See [`config/config.example.yaml`](../config/config.example.yaml). Highlights:
 
 - `units.temperature`: `C` or `F`.
-- `sensors.onewire`: map each DS18B20 ROM id → role (`return_air`, etc.).
-- `sensors.pressure`: I²C bus/address, part range, tubing polarity.
+- `sensors.onewire`: map each DS18B20 ROM id → role (`suction_line`, `liquid_line`,
+  `input_air`, `output_air`).
+- `sensors.pressure`: HAT ADC channel, full-scale range, and the two-point
+  `volts → inH₂O` calibration for the Setra 265 + divider.
 - `sensors.digital`: HAT stack level + opto channel for the sail switch.
 - `mqtt`: broker host/port/credentials, base topic, HA discovery prefix.
 - `thresholds`: ΔT band, filter ΔP limit, debounce windows.
