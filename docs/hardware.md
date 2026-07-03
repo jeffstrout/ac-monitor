@@ -6,8 +6,9 @@ Sequent Home Automation HAT, per-sensor wiring, and the OS-level setup needed fo
 
 > **Every field signal now terminates on the Sequent HAT.** An earlier revision used a
 > digital I²C pressure sensor (Sensirion SDP810) that had to hang off the Pi's I²C
-> header; it's been replaced by a **Setra Model 265** analog transmitter whose 0–5 V
-> output lands on a HAT analog input. Nothing field-wired touches the Pi header anymore.
+> header; it's been replaced by a **Setra Model 265** analog transmitter whose **4–20 mA**
+> output drops a voltage across a sense resistor into a HAT analog input. Nothing
+> field-wired touches the Pi header anymore.
 
 ## 1. Bill of materials
 
@@ -18,9 +19,10 @@ Sequent Home Automation HAT, per-sensor wiring, and the OS-level setup needed fo
 | 1 | 5 V / ≥3 A regulated power supply | Powers Pi + HAT |
 | 4 | DS18B20 temperature probe (waterproof, 3-wire) | 1-Wire, multidrop on one bus. 2× pipe-clamp/strap-on style for the refrigerant lines |
 | 1 | 4.7 kΩ resistor | 1-Wire pull-up, DATA→+3.3 V (only if HAT does not already provide one — verify) |
-| 1 | **Setra Model 265** differential pressure transmitter | Unidirectional **0–2″ W.C.**, **0–5 VDC** output, 24 VAC powered |
-| 1 | 24 VAC source (or 24 VDC supply) for the Setra 265 | Tap the HVAC transformer (R/C) or use a small dedicated supply |
-| 2 | Resistor: 1 kΩ + 1.8 kΩ (¼ W, 1 %) | Voltage divider scaling the 0–5 V output into the 0–3.3 V ADC |
+| 1 | **Setra Model 265** differential pressure transmitter | Unidirectional **0–2″ W.C.**, **4–20 mA** output, 2-wire loop powered |
+| 1 | 24 VDC supply for the 4–20 mA loop | Small wall-wart, or rectify+smooth the existing 24 VAC (peak ~34 V) |
+| 1 | Resistor: **150 Ω** (¼ W, 0.1 %) | Sense resistor: converts 4–20 mA → ~0.6–3.0 V for the ADC |
+| 1 | 3.3 V TVS/Zener clamp (e.g. SMAJ3.3A / 3.3 V Zener) | Across `AD1`→`GND`; protects the input if the sense resistor opens |
 | 2 | Silicone/PVC pressure tubing + static pressure tips | One tap upstream, one downstream of the filter/coil |
 | 1 | Sail switch (air-proving switch, SPDT dry contact) | e.g. a furnace/duct sail switch |
 | — | Ferrules / 26–16 AWG wire | HAT uses pluggable screw terminals |
@@ -30,10 +32,13 @@ Sequent Home Automation HAT, per-sensor wiring, and the OS-level setup needed fo
 - **Range:** unidirectional **0–2″ W.C.** suits residential filter/coil loading — a clean
   filter reads ~0.1–0.3″, a dirty one ~0.5–1″, with headroom. (0–1″ for max resolution,
   0–5″ if you'd rather track total external static pressure.)
-- **Output:** the **0–5 VDC** option pairs with the simple 1 kΩ/1.8 kΩ divider below.
-  (A 0–10 V option would just need a different divider ratio.)
-- **Power:** the 265 needs 24 VAC or 9–30 VDC — the HAT's +5 V rail is **not** enough, so
-  power comes from a 24 VAC/DC source. Only the *signal* + *ground* land on the HAT.
+- **Output:** the **4–20 mA** option is used here. A current loop is inherently safe for a
+  3.3 V-max input: the ADC voltage is set by the sense resistor (current × R), so it can't
+  exceed ~3 V in normal operation regardless of the transmitter or its supply — unlike a
+  0–5/0–10 V output, which is hotter than the input and relies on a divider staying honest.
+- **Power:** a 4–20 mA transmitter is 2-wire *loop powered* and needs **24 VDC** (9–30 VDC
+  range). Use a small 24 VDC supply, or rectify+smooth the existing 24 VAC. Only the loop's
+  two wires + the sense resistor land on the HAT.
 
 ## 2. HAT I/O map
 
@@ -44,7 +49,7 @@ control/expansion.
 | HAT resource | Terminal | Assigned to | Type |
 |---|---|---|---|
 | 1-Wire port | `1-WIRE` / `+5V` / `GND` (top-left) | 4× DS18B20 | Kernel `w1` driver |
-| Analog input 1 | `AD1` / `GND` | Setra 265 pressure (via divider) | 0–3.3 V ADC |
+| Analog input 1 | `AD1` / `GND` | Setra 265 pressure (via 150 Ω sense resistor) | 0–3.3 V ADC |
 | Opto input 1 | `OPTO-1` / `GND` | Sail switch | Contact closure |
 | Opto input 2 | `OPTO-2` | *(future)* Call for heat — W | Contact closure |
 | Opto input 3 | `OPTO-3` | *(future)* Call for cool — Y | Contact closure |
@@ -62,11 +67,12 @@ flowchart LR
       T3["DS18B20 #3<br/>Input air (return)"]
       T4["DS18B20 #4<br/>Output air (supply)"]
       SAIL["Sail switch<br/>(airflow proof)"]
-      SETRA["Setra 265<br/>0–5 V, ΔP across filter/coil"]
+      SETRA["Setra 265<br/>4–20 mA, ΔP across filter/coil"]
     end
 
-    DIV["1k / 1.8k<br/>divider"]
-    P24["24 VAC / VDC<br/>supply"]
+    P24["24 VDC<br/>loop supply"]
+    RS["150 Ω<br/>sense resistor"]
+    TVS["3.3 V clamp"]
 
     subgraph HAT["Sequent Home Automation HAT"]
       OW["1-Wire port<br/>+5V / DATA / GND"]
@@ -81,11 +87,17 @@ flowchart LR
     T3 --- OW
     T4 --- OW
     SAIL --- O1
-    P24 --- SETRA
-    SETRA -- "0–5 V out" --> DIV
-    DIV -- "0–3.3 V" --> AD1
+    P24 -- "loop +" --> SETRA
+    SETRA -- "4–20 mA" --> RS
+    RS -- "0.6–3.0 V" --> AD1
+    RS -- "loop return" --> P24
+    TVS -.clamps.- AD1
     HAT -.stacked on.- PI
 ```
+
+The 150 Ω sense resistor sits between `AD1` and `GND`; the loop current flows
+`24 VDC +` → Setra → the sense resistor → `GND` → back to `24 VDC −`, and `AD1`
+reads the voltage developed across the resistor. Tie the loop supply `−` to HAT `GND`.
 
 ## 4. Temperature probes — DS18B20 (1-Wire)
 
@@ -124,41 +136,53 @@ sudo reboot
 
 After reboot, each probe appears as `/sys/bus/w1/devices/28-XXXXXXXXXXXX/temperature`.
 
-## 5. Differential pressure — Setra Model 265 (analog, on the HAT)
+## 5. Differential pressure — Setra Model 265 (4–20 mA, on the HAT)
 
-The Setra 265 is a 3-wire analog transmitter: it takes 24 VAC/DC power and outputs a
-0–5 VDC signal proportional to differential pressure. The HAT's analog inputs read
-**0–3.3 V**, so a resistor divider scales the 0–5 V output before it reaches `AD1`.
+The Setra 265 is configured for **4–20 mA** output: a 2-wire loop where the transmitter
+regulates the loop current in proportion to differential pressure. A **150 Ω** sense
+resistor converts that current into a voltage the HAT's 0–3.3 V ADC can read. Because the
+voltage is `current × resistor`, it is bounded by design and can't exceed the input's
+3.3 V max in normal operation — the reason this beats a 0–5/0–10 V output + divider.
 
-### Wiring
+### Wiring (2-wire current loop)
 
-| Setra 265 | Connect to |
+```
+  24 VDC (+) ──▶ Setra 265 ──▶ AD1 ──[ 150 Ω ]── GND ──▶ 24 VDC (−)
+                              (node)          (sense R)
+```
+
+| Node | Connect |
 |---|---|
-| Power (+) | 24 VAC/VDC supply hot |
-| Power (−) / common | 24 VAC/VDC supply common **and** HAT `GND` (shared reference) |
-| Output (0–5 V) | Top of divider → `R1` (1 kΩ) |
+| 24 VDC supply `+` | Setra 265 loop `+` terminal |
+| Setra 265 loop `−` / out | HAT `AD1` **and** the top of the 150 Ω sense resistor |
+| Sense resistor bottom | HAT `GND` **and** 24 VDC supply `−` (shared reference) |
 
-Divider: `Setra OUT → R1 (1 kΩ) → node → R2 (1.8 kΩ) → GND`. The **node** goes to HAT
-`AD1`. Tie the Setra common, `R2` bottom, and HAT `GND` together so everything shares one
-reference.
+Add the **3.3 V TVS/Zener clamp** across `AD1`→`GND`. If the sense resistor ever opens,
+the current source would otherwise drive `AD1` toward the loop supply voltage; the clamp
+pins it at 3.3 V.
 
 ### Scaling math
 
-With `R1 = 1 kΩ`, `R2 = 1.8 kΩ`, and the analog input's built-in **15 kΩ pull-up to
-3.3 V**, the ADC sees roughly:
+With `Rsense = 150 Ω` and the analog input's built-in **15 kΩ pull-up to 3.3 V**, the ADC
+sees roughly:
 
-- **0″ W.C.** (0 V out) → **≈ 0.14 V** at `AD1`
-- **2″ W.C.** (5 V out) → **≈ 3.22 V** at `AD1`  (safely under the 3.3 V max)
+| Loop current | Pressure | `AD1` voltage |
+|---|---|---|
+| 4 mA | 0″ W.C. | ≈ 0.63 V |
+| 20 mA | 2″ W.C. (full scale) | ≈ 3.00 V |
+| ~22 mA | over-range / saturated | ≈ 3.30 V (at the limit — hence the clamp) |
 
-The 15 kΩ pull-up adds a small offset/gain shift; it's linear and removed by calibration.
+The 15 kΩ pull-up adds a small offset (~0.03 V); it's linear and removed by calibration.
+The usable span (~0.63–3.00 V) still fills most of the ADC → ~2,950 counts across range.
 
 ### Tubing & calibration
 
 - **Tubing:** upstream (high-pressure) tap → the 265's **High/+** port; downstream tap →
   **Low/−** port, so a loading filter reads as increasing positive ΔP.
-- **Calibrate** either in software (two measured `volts → inH₂O` points in `config.yaml`,
-  refined against a manometer) or with the board's two-point `cuin` analog-input
-  calibration. See [`config/config.example.yaml`](../config/config.example.yaml).
+- **Calibrate** in software: two measured `volts → inH₂O` points in `config.yaml` (the
+  4 mA "zero" reading and a known ΔP), refined against a manometer. The board's two-point
+  `cuin` analog-input calibration can also true up the raw voltage.
+  See [`config/config.example.yaml`](../config/config.example.yaml).
 
 ## 6. Sail switch (airflow proof)
 
@@ -190,10 +214,10 @@ does not interrupt it). Planned mapping: W→OPTO-2, Y→OPTO-3, G→OPTO-4.
 
 - Keep 24 VAC (and any line-voltage) wiring physically separated from the low-voltage
   sensor wiring; only isolated dry contacts should reach the HAT opto inputs.
-- The 24 VAC feeding the Setra 265 should be fused/limited; if you tap the HVAC
-  transformer, confirm it has capacity for the extra (small) load.
-- Never let the divided pressure signal exceed the analog input's 3.3 V maximum — verify
-  the `AD1` voltage at full scale before relying on it.
+- The 24 VDC feeding the current loop should be fused/limited; if you derive it from the
+  HVAC transformer, confirm capacity for the extra (small) load.
+- Fit the 3.3 V clamp on `AD1` and verify the full-scale (20 mA) voltage is under 3.3 V
+  before relying on it — the 150 Ω resistor keeps normal operation at ~3.0 V.
 - Power the Pi + HAT from a single regulated 5 V supply rated well above the combined
   load (the HAT alone can draw ~750 mA with all relays on; we use none, but size for headroom).
 - Observe the Setra 265's rated overpressure limit — it's a low-pressure duct transmitter,

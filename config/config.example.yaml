@@ -17,17 +17,19 @@ sensors:
     input_air:    "28-000000000002"   # return air entering the coil
     output_air:   "28-000000000003"   # supply air leaving the coil
 
-  # Setra Model 265 differential pressure transmitter (0-2" W.C., 0-5 VDC out),
-  # 24 VAC powered; output scaled by a 1k/1.8k divider into a HAT analog input.
+  # Setra Model 265 differential pressure transmitter (0-2" W.C., 4-20 mA output),
+  # 2-wire loop powered from 24 VDC; a 150 ohm sense resistor across AD1->GND
+  # converts the loop current to a voltage the HAT analog input reads.
   pressure:
     hat_stack_level: 0
     adc_channel: 1          # HAT analog input AD1
     range_inh2o: 2.0        # sensor full-scale (unidirectional)
     # Two-point linear map of measured ADC volts -> inH2O (refine with a manometer).
-    # Defaults reflect the 1k/1.8k divider + the input's 15k pull-up to 3.3V.
+    # Defaults reflect a 150 ohm sense resistor + the input's 15k pull-up to 3.3V:
+    #   4 mA  (0" W.C.)  -> ~0.63 V ;  20 mA (full scale) -> ~3.00 V
     calibration:
-      volts_at_zero: 0.14   # ADC volts at 0" W.C.
-      volts_at_full: 3.22   # ADC volts at range_inh2o
+      volts_at_zero: 0.63   # ADC volts at 0" W.C. (4 mA)
+      volts_at_full: 3.00   # ADC volts at range_inh2o (20 mA)
     invert: false           # true if tubing polarity reads a loaded filter as negative
 
   # HAT opto-isolated digital inputs (Sequent Home Automation HAT).

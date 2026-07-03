@@ -23,7 +23,7 @@ no code exists yet.
 | Language | Python 3.11+ | Sequent ships a Python library; rich sensor ecosystem |
 | HAT opto inputs | Sequent `SMioplus` library | Official driver for the Home Automation HAT |
 | 1-Wire temps | Linux `w1` sysfs (`/sys/bus/w1/devices`) | Kernel-native, no extra driver |
-| Pressure sensor | Sequent `SMioplus` analog read (`AD1`) | Setra 265 0–5 V → HAT ADC (via divider) |
+| Pressure sensor | Sequent `SMioplus` analog read (`AD1`) | Setra 265 4–20 mA → 150 Ω sense R → HAT ADC |
 | MQTT | `paho-mqtt` | De-facto standard, HA-friendly |
 | Web | FastAPI + Uvicorn | Async, tiny, serves API + static dashboard |
 | Config | YAML (`pyyaml`) | Human-editable sensor mapping/calibration |
@@ -108,7 +108,7 @@ See [`config/config.example.yaml`](../config/config.example.yaml). Highlights:
 - `sensors.onewire`: map each DS18B20 ROM id → role (`suction_line`, `liquid_line`,
   `input_air`, `output_air`).
 - `sensors.pressure`: HAT ADC channel, full-scale range, and the two-point
-  `volts → inH₂O` calibration for the Setra 265 + divider.
+  `volts → inH₂O` calibration for the Setra 265 (4–20 mA + 150 Ω sense resistor).
 - `sensors.digital`: HAT stack level + opto channel for the sail switch.
 - `mqtt`: broker host/port/credentials, base topic, HA discovery prefix.
 - `thresholds`: ΔT band, filter ΔP limit, debounce windows.

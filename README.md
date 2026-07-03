@@ -14,7 +14,7 @@ dashboard and publishes everything to **Home Assistant** over MQTT.
 ## What it does
 
 - **4× temperature probes** (DS18B20, 1-Wire) — suction line, liquid line, input air, output air
-- **Differential pressure** (Setra 265 transmitter, 0–5 V analog) — filter/coil pressure drop
+- **Differential pressure** (Setra 265 transmitter, 4–20 mA) — filter/coil pressure drop
 - **Airflow proof** (sail switch) — confirms air is actually moving in the duct
 - **Derived metrics** — air-side ΔT (input − output), refrigerant line temps, filter loading
 - **Web dashboard** — live readings in the browser
@@ -30,7 +30,7 @@ signals through the HAT's opto-isolated inputs (see the [roadmap](docs/roadmap.m
 |---|---|---|---|
 | 4× line/air temps | DS18B20 | 1-Wire (multidrop) | HAT 1-Wire port |
 | Airflow proof | Sail switch (dry contact) | Contact closure | HAT opto input 1 |
-| Differential pressure | Setra 265 transmitter | 0–5 V → ADC (via divider) | HAT analog input 1 |
+| Differential pressure | Setra 265 transmitter | 4–20 mA → ADC (via 150 Ω sense R) | HAT analog input 1 |
 
 **Every field signal lands on the Sequent board.** An earlier revision used an I²C
 pressure sensor that had to hang off the Pi header; it's been replaced by the analog
