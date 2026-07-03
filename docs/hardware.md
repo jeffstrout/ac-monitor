@@ -19,7 +19,7 @@ Sequent Home Automation HAT, per-sensor wiring, and the OS-level setup needed fo
 | 1 | 5 V / ≥3 A regulated power supply | Powers Pi + HAT |
 | 4 | DS18B20 temperature probe (waterproof, 3-wire) | 1-Wire, multidrop on one bus. 2× pipe-clamp/strap-on style for the refrigerant lines |
 | 1 | 4.7 kΩ resistor | 1-Wire pull-up, DATA→+3.3 V (only if HAT does not already provide one — verify) |
-| 1 | **Setra Model 265** differential pressure transmitter | Unidirectional **0–2″ W.C.**; order the **4–20 mA output** version (9–30 VDC, 2-wire loop — check the unit label). Air only; ambient 0–150 °F |
+| 1 | **Setra Model 265** differential pressure transmitter, P/N **`26512R5WD11T1C`** | 0–2.5″ W.C. unidirectional, 4–20 mA, 24 VDC, terminal strip, ±1 %. Air only; ambient 0–150 °F |
 | 1 | 24 VDC supply for the 4–20 mA loop | Small wall-wart, or rectify+smooth the existing 24 VAC (peak ~34 V) |
 | 1 | Resistor: **150 Ω** (¼ W, 0.1 %) | Sense resistor: converts 4–20 mA → ~0.6–3.0 V for the ADC |
 | 1 | 3.3 V TVS/Zener clamp (e.g. SMAJ3.3A / 3.3 V Zener) | Across `AD1`→`GND`; protects the input if the sense resistor opens |
@@ -29,13 +29,17 @@ Sequent Home Automation HAT, per-sensor wiring, and the OS-level setup needed fo
 
 ### Sensor selection notes (Setra 265)
 
-- **Range:** unidirectional **0–2″ W.C.** suits residential filter/coil loading — a clean
-  filter reads ~0.1–0.3″, a dirty one ~0.5–1″, with headroom. (0–1″ for max resolution,
-  0–5″ if you'd rather track total external static pressure.)
-- **Output:** the **4–20 mA** option is used here. A current loop is inherently safe for a
-  3.3 V-max input: the ADC voltage is set by the sense resistor (current × R), so it can't
-  exceed ~3 V in normal operation regardless of the transmitter or its supply — unlike a
-  0–5/0–10 V output, which is hotter than the input and relies on a divider staying honest.
+- **Range:** the 265 has **no 0–2″ option** — standard unidirectional steps are 1″, **2.5″**,
+  5″. Use **0–2.5″ W.C.** (`26512R5WD11T1C`) for residential filter/coil loading: a clean
+  filter reads ~0.1–0.3″, a dirty one ~0.5–1″, leaving headroom. Alternatives:
+  **0–1″** (`2651001WD11T1C`) for max resolution, or **0–5″** (`2651005WD11T1C`) to track
+  total external static pressure. Whichever you pick, only `range_inh2o` in `config.yaml`
+  changes — the 4–20 mA electrical scaling is identical.
+- **Output:** the **4–20 mA** option (excitation/output code `11` = 24 VDC / 4–20 mA) is
+  used here. A current loop is inherently safe for a 3.3 V-max input: the ADC voltage is set
+  by the sense resistor (current × R), so it can't exceed ~3 V in normal operation regardless
+  of the transmitter or its supply — unlike a 0–5/0–10 V output, which is hotter than the
+  input and relies on a divider staying honest.
 - **Power:** a 4–20 mA transmitter is 2-wire *loop powered* and needs **24 VDC** (9–30 VDC
   range). Use a small 24 VDC supply, or rectify+smooth the existing 24 VAC. Only the loop's
   two wires + the sense resistor land on the HAT.
@@ -144,19 +148,22 @@ resistor converts that current into a voltage the HAT's 0–3.3 V ADC can read. 
 voltage is `current × resistor`, it is bounded by design and can't exceed the input's
 3.3 V max in normal operation — the reason this beats a 0–5/0–10 V output + divider.
 
-### Datasheet check (Model 265 Operating Instructions)
+### Datasheet check (Model 265)
 
-Verified against the datasheet in [`Hardware Documentation/`](../Hardware%20Documentation/Setra_Model_265_Operating_Instructions.pdf):
+Verified against the Setra Operating Instructions + Data Sheet (ordering guide):
 
-- **Get the 4–20 mA version.** The 265 also ships as 0–5 V and 0–10 V; the unit's label
-  states the excitation/output. We want the **4–20 mA, 9–30 VDC, 2-wire loop** variant.
+- **Part number: `26512R5WD11T1C`** — decoded from Setra's matrix: `2651` (Model 265) +
+  `2R5WD` (0–2.5″ W.C. unidirectional) + `11` (24 VDC / 4–20 mA) + `T1` (terminal strip) +
+  `C` (±1 % FS). This is Setra's own catalog *example* configuration, so it's a standard build.
+- **The 265 also ships as 0–5 V / 0–10 V** — codes `2B` / `AB` / `AC`. Make sure the label
+  reads the 4–20 mA code `11`; same body, different unit.
 - **Use 150 Ω — *not* Setra's factory 250 Ω load.** Setra calibrates the loop at 24 VDC /
-  250 Ω, but 250 Ω × 20 mA = **5 V**, which exceeds the HAT's 3.3 V input. A current output
-  is load-independent within its compliance window, so 150 Ω (→ 3.0 V full scale) is fine;
-  any small load-change error is trimmed out by the two-point software calibration.
-- **Compliance is OK.** At 24 VDC with 150 Ω, the transmitter sees ~21 V across its
-  terminals at 20 mA — inside its 9–30 V window (and ~23 V at 4 mA, under 30 V).
-- **Limits:** air / non-condensing gas only; ambient **0–150 °F** (mind attic heat);
+  250 Ω, but 250 Ω × 20 mA = **5 V**, which exceeds the HAT's 3.3 V input. The current output
+  is spec'd to drive an **external load of 0–800 Ω**, so 150 Ω (→ 3.0 V full scale) is well
+  inside range; the small load-change error is trimmed by the two-point software calibration.
+- **Loop supply is fine.** Setra's own limits: min = `9 + 0.02 × R` ≈ **12 V** at 150 Ω,
+  max = `30 + 0.004 × R` ≈ **30.6 V**. Our 24 VDC sits comfortably between.
+- **Limits:** clean air / non-conducting gas only; ambient **0–150 °F** (mind attic heat);
   overpressure & max line pressure 10 PSI (duct pressure is far below); accuracy **±1 % FS**.
 - **Ports:** front-labeled **HIGH** / **LOW**, ¼″ push-on fittings (3/16″ ID tube suggested).
 
@@ -189,7 +196,7 @@ sees roughly:
 | Loop current | Pressure | `AD1` voltage |
 |---|---|---|
 | 4 mA | 0″ W.C. | ≈ 0.63 V |
-| 20 mA | 2″ W.C. (full scale) | ≈ 3.00 V |
+| 20 mA | 2.5″ W.C. (full scale) | ≈ 3.00 V |
 | ~22 mA | over-range / saturated | ≈ 3.30 V (at the limit — hence the clamp) |
 
 The 15 kΩ pull-up adds a small offset (~0.03 V); it's linear and removed by calibration.

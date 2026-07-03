@@ -17,13 +17,13 @@ sensors:
     input_air:    "28-000000000002"   # return air entering the coil
     output_air:   "28-000000000003"   # supply air leaving the coil
 
-  # Setra Model 265 differential pressure transmitter (0-2" W.C., 4-20 mA output),
+  # Setra Model 265 P/N 26512R5WD11T1C (0-2.5" W.C. unidirectional, 4-20 mA output),
   # 2-wire loop powered from 24 VDC; a 150 ohm sense resistor across AD1->GND
   # converts the loop current to a voltage the HAT analog input reads.
   pressure:
     hat_stack_level: 0
     adc_channel: 1          # HAT analog input AD1
-    range_inh2o: 2.0        # sensor full-scale (unidirectional)
+    range_inh2o: 2.5        # sensor full-scale (unidirectional; 20 mA = this value)
     # Two-point linear map of measured ADC volts -> inH2O (refine with a manometer).
     # Defaults reflect a 150 ohm sense resistor + the input's 15k pull-up to 3.3V:
     #   4 mA  (0" W.C.)  -> ~0.63 V ;  20 mA (full scale) -> ~3.00 V
