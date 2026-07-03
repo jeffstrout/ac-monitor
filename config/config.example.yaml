@@ -1,0 +1,58 @@
+# AC Monitor — example configuration
+# Copy to config.yaml and fill in the real DS18B20 ROM ids and MQTT credentials.
+# This file documents the intended config schema; the loader/validator is Phase 2.
+
+units:
+  temperature: F          # C or F
+
+poll:
+  interval_s: 5           # how often to read all sensors
+  sail_debounce_s: 3      # ignore airflow changes shorter than this
+
+sensors:
+  # Map each DS18B20's unique ROM id (from /sys/bus/w1/devices/28-*) to a role.
+  onewire:
+    return_air: "28-000000000000"
+    supply_air: "28-000000000001"
+    coil:       "28-000000000002"
+    spare:      "28-000000000003"
+
+  # Sensirion SDP810 differential pressure — I2C on the Pi bus (NOT the HAT terminals).
+  pressure:
+    i2c_bus: 1
+    address: 0x25         # 0x25 for SDP8x0, 0x26 for SDP8x1
+    range_pa: 125         # 125 or 500, per the part you bought
+    invert: false         # true if your tubing polarity reads a loaded filter as negative
+
+  # HAT opto-isolated digital inputs (Sequent Home Automation HAT).
+  digital:
+    hat_stack_level: 0
+    sail_switch:
+      opto_channel: 1
+      active_high: true   # airflow present => contact closed => active
+    # Future (Phase 6) — thermostat call signals via 24 VAC pilot relays:
+    # call_heat: { opto_channel: 2 }
+    # call_cool: { opto_channel: 3 }
+    # fan:       { opto_channel: 4 }
+
+thresholds:
+  delta_t:
+    cooling_min_f: 15     # expected cooling ΔT band (return - supply)
+    cooling_max_f: 22
+    heating_min_f: 25     # expected heating ΔT band
+    heating_max_f: 70
+  filter_dp:
+    high_pa: 60           # alert above this differential pressure (change filter)
+
+mqtt:
+  host: "192.168.1.10"
+  port: 1883
+  username: ""
+  password: ""
+  base_topic: "ac_monitor"
+  discovery_prefix: "homeassistant"
+  retain: true
+
+web:
+  host: "0.0.0.0"
+  port: 8000

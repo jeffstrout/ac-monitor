@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Local config with real credentials / ROM ids
+config/config.yaml
+
+# Python (for when code lands)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Editor
+.idea/
+.vscode/
