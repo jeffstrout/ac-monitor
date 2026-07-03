@@ -19,7 +19,7 @@ Sequent Home Automation HAT, per-sensor wiring, and the OS-level setup needed fo
 | 1 | 5 V / ≥3 A regulated power supply | Powers Pi + HAT |
 | 4 | DS18B20 temperature probe (waterproof, 3-wire) | 1-Wire, multidrop on one bus. 2× pipe-clamp/strap-on style for the refrigerant lines |
 | 1 | 4.7 kΩ resistor | 1-Wire pull-up, DATA→+3.3 V (only if HAT does not already provide one — verify) |
-| 1 | **Setra Model 265** differential pressure transmitter | Unidirectional **0–2″ W.C.**, **4–20 mA** output, 2-wire loop powered |
+| 1 | **Setra Model 265** differential pressure transmitter | Unidirectional **0–2″ W.C.**; order the **4–20 mA output** version (9–30 VDC, 2-wire loop — check the unit label). Air only; ambient 0–150 °F |
 | 1 | 24 VDC supply for the 4–20 mA loop | Small wall-wart, or rectify+smooth the existing 24 VAC (peak ~34 V) |
 | 1 | Resistor: **150 Ω** (¼ W, 0.1 %) | Sense resistor: converts 4–20 mA → ~0.6–3.0 V for the ADC |
 | 1 | 3.3 V TVS/Zener clamp (e.g. SMAJ3.3A / 3.3 V Zener) | Across `AD1`→`GND`; protects the input if the sense resistor opens |
@@ -144,6 +144,22 @@ resistor converts that current into a voltage the HAT's 0–3.3 V ADC can read. 
 voltage is `current × resistor`, it is bounded by design and can't exceed the input's
 3.3 V max in normal operation — the reason this beats a 0–5/0–10 V output + divider.
 
+### Datasheet check (Model 265 Operating Instructions)
+
+Verified against the datasheet in [`Hardware Documentation/`](../Hardware%20Documentation/Setra_Model_265_Operating_Instructions.pdf):
+
+- **Get the 4–20 mA version.** The 265 also ships as 0–5 V and 0–10 V; the unit's label
+  states the excitation/output. We want the **4–20 mA, 9–30 VDC, 2-wire loop** variant.
+- **Use 150 Ω — *not* Setra's factory 250 Ω load.** Setra calibrates the loop at 24 VDC /
+  250 Ω, but 250 Ω × 20 mA = **5 V**, which exceeds the HAT's 3.3 V input. A current output
+  is load-independent within its compliance window, so 150 Ω (→ 3.0 V full scale) is fine;
+  any small load-change error is trimmed out by the two-point software calibration.
+- **Compliance is OK.** At 24 VDC with 150 Ω, the transmitter sees ~21 V across its
+  terminals at 20 mA — inside its 9–30 V window (and ~23 V at 4 mA, under 30 V).
+- **Limits:** air / non-condensing gas only; ambient **0–150 °F** (mind attic heat);
+  overpressure & max line pressure 10 PSI (duct pressure is far below); accuracy **±1 % FS**.
+- **Ports:** front-labeled **HIGH** / **LOW**, ¼″ push-on fittings (3/16″ ID tube suggested).
+
 ### Wiring (2-wire current loop)
 
 ```
@@ -153,9 +169,13 @@ voltage is `current × resistor`, it is bounded by design and can't exceed the i
 
 | Node | Connect |
 |---|---|
-| 24 VDC supply `+` | Setra 265 loop `+` terminal |
-| Setra 265 loop `−` / out | HAT `AD1` **and** the top of the 150 Ω sense resistor |
+| 24 VDC supply `+` | Setra 265 `+ (EXC)` terminal |
+| Setra 265 `− (COM)` terminal | HAT `AD1` **and** the top of the 150 Ω sense resistor |
 | Sense resistor bottom | HAT `GND` **and** 24 VDC supply `−` (shared reference) |
+
+Setra's current-loop terminals are labeled **+ (EXC)** and **− (COM)**; current flows in
+the `+` terminal and returns through the `−` terminal, so the sense resistor sits in the
+return leg (low-side) with its bottom at `GND`.
 
 Add the **3.3 V TVS/Zener clamp** across `AD1`→`GND`. If the sense resistor ever opens,
 the current source would otherwise drive `AD1` toward the loop supply voltage; the clamp

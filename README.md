@@ -43,8 +43,8 @@ Setra 265, so nothing field-wired touches the Pi header. See [docs/hardware.md](
 - **[MQTT & Home Assistant](docs/mqtt-homeassistant.md)** — topic tree and auto-discovery spec
 - **[Auto-update](docs/auto-update.md)** — GHCR + Watchtower hands-off deployment
 - **[Roadmap](docs/roadmap.md)** — phased implementation plan
-- **[Vendor docs](Hardware%20Documentation/)** — Sequent HAT user guide (add the Setra 265
-  datasheet here; the folder's Sensirion SDP8xx datasheet is from the superseded I²C design)
+- **[Vendor docs](Hardware%20Documentation/)** — Sequent HAT user guide + Setra Model 265
+  datasheet (the Sensirion SDP8xx datasheet is from the superseded I²C design)
 
 ## Target platform
 
