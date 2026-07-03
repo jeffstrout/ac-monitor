@@ -51,10 +51,14 @@ ac_monitor/
 │   ├── client.py        # paho wrapper, connect/reconnect, LWT
 │   └── discovery.py     # Home Assistant MQTT discovery payloads
 ├── web/
-│   ├── app.py           # FastAPI app: /api/state, /healthz, dashboard
+│   ├── app.py           # FastAPI app: /api/state, /api/version, /healthz, dashboard
 │   └── static/          # single-page dashboard (HTML/CSS/JS)
+├── version.py           # reads APP_COMMIT / APP_BUILD_TIME baked into the image
 └── __main__.py          # wire everything together; run poller + web + mqtt
 ```
+
+`__main__.py` is what the Docker image runs (`python -m ac_monitor`), which is
+also what makes the [auto-update pipeline](auto-update.md) go live.
 
 ## 4. Data model
 
@@ -108,13 +112,29 @@ See [`config/config.example.yaml`](../config/config.example.yaml). Highlights:
 
 ## 8. Deployment
 
-- Install into a virtualenv at `/opt/ac-monitor` (or `~/ac-monitor`).
-- `deploy/ac-monitor.service` — a `systemd` unit that runs `python -m ac_monitor`,
-  `Restart=on-failure`, and starts after `network-online.target`.
-- `deploy/install.sh` — enable I²C + 1-Wire, create the venv, install deps, copy the
-  config template, install & enable the service.
-- Optional: enable the HAT hardware watchdog for unattended reliability (documented in the
-  Sequent user guide).
+Two supported paths:
+
+**A. Docker + auto-update (recommended)** — see [auto-update.md](auto-update.md).
+The Pi pulls a prebuilt multi-arch image from GHCR and self-updates via Watchtower
+whenever a PR merges to `main`. Files: [`deploy/Dockerfile`](../deploy/Dockerfile),
+[`deploy/docker-compose.yml`](../deploy/docker-compose.yml),
+[`.github/workflows/docker-publish.yml`](../.github/workflows/docker-publish.yml).
+The container runs `privileged` for I²C + 1-Wire access; `/data` holds the config
+and persisted state across updates.
+
+**B. Bare-metal systemd (alternative)** — install into a virtualenv at
+`/opt/ac-monitor`; a `deploy/ac-monitor.service` unit runs `python -m ac_monitor`
+with `Restart=on-failure` after `network-online.target`; an `install.sh` enables
+I²C + 1-Wire, creates the venv, installs deps, and enables the service. (No
+hands-off updates on this path — you'd `git pull` + restart yourself.)
+
+**Build provenance / `/api/version`.** The image bakes `APP_COMMIT` and
+`APP_BUILD_TIME` (from CI) into the environment; `version.py` reads them and the
+web layer exposes `GET /api/version` so you can confirm which build is running
+after an auto-update.
+
+Optional on either path: enable the HAT hardware watchdog for unattended
+reliability (documented in the Sequent user guide).
 
 ## 9. Testing strategy
 

@@ -1,0 +1,61 @@
+# Production / Raspberry Pi deploy with hands-off auto-update.
+#
+# The Pi PULLS a prebuilt multi-arch image from GHCR — it never builds from
+# source. Watchtower checks GHCR on an interval and recreates the container when
+# a newer image is published, so merging a PR to main rolls out to the device
+# automatically (see docs/auto-update.md).
+#
+#   cd deploy
+#   cp .env.example .env          # optional overrides
+#   docker compose pull && docker compose up -d     # first run / manual update
+#
+services:
+  ac-monitor:
+    image: ghcr.io/jeffstrout/ac-monitor:${IMAGE_TAG:-latest}
+    container_name: ac-monitor
+    restart: unless-stopped
+
+    # The service needs direct hardware access:
+    #   * I2C bus /dev/i2c-1  -> Sequent Home Automation HAT + Sensirion SDP810
+    #   * 1-Wire sysfs        -> DS18B20 temperature probes (host kernel w1 driver)
+    # On a dedicated monitoring Pi, privileged mode is the simplest reliable way
+    # to expose all three (I2C device, GPIO, and the /sys/bus/w1 tree). Tighten
+    # later with explicit `devices:`/mounts if you prefer least-privilege.
+    privileged: true
+    devices:
+      - "/dev/i2c-1:/dev/i2c-1"   # explicit + self-documenting (covered by privileged)
+
+    # Opt this container in to Watchtower auto-updates (scoped by label below).
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+    ports:
+      - "${HOST_PORT:-8000}:8000"   # dashboard + API -> http://<pi-ip>:8000
+
+    volumes:
+      - ac-monitor-data:/data       # config.yaml + persisted state survive updates
+
+    environment:
+      TZ: ${TZ:-UTC}                          # e.g. America/Chicago
+      CONFIG_FILE: ${CONFIG_FILE:-/data/config.yaml}
+
+  # Auto-updater: polls GHCR for a newer ac-monitor image and recreates the
+  # container in place. Only touches containers labelled watchtower.enable=true.
+  watchtower:
+    image: containrrr/watchtower
+    container_name: ac-monitor-watchtower
+    restart: unless-stopped
+    volumes:
+      # Root-equivalent on the host — acceptable on a dedicated device Pi.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Watchtower otherwise negotiates an ancient Docker API version (1.25)
+      # that modern Docker Engine rejects, silently breaking update checks.
+      # 1.40 is the daemon's minimum, so it's safely in range.
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION:-1.40}
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-1200}  # seconds (~20 min)
+      WATCHTOWER_LABEL_ENABLE: "true"   # only update opted-in containers
+      WATCHTOWER_CLEANUP: "true"        # prune old images (saves SD-card space)
+
+volumes:
+  ac-monitor-data:

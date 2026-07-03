@@ -19,6 +19,7 @@ dashboard and publishes everything to **Home Assistant** over MQTT.
 - **Derived metrics** — coil ΔT (return − supply), filter loading, airflow-vs-call faults
 - **Web dashboard** — live readings in the browser
 - **Home Assistant** — auto-discovered sensors & binary sensors via MQTT
+- **Hands-off updates** — merge a PR and the Pi self-updates via GHCR + Watchtower ([details](docs/auto-update.md))
 
 Planned for a later phase: reading the thermostat's call-for-heat / call-for-cool / fan
 signals through the HAT's opto-isolated inputs (see the [roadmap](docs/roadmap.md)).
@@ -39,6 +40,7 @@ terminals — it shares the Pi's I²C bus with the HAT. See [docs/hardware.md](d
 - **[Hardware & wiring](docs/hardware.md)** — bill of materials, I/O map, wiring, 1-Wire & I²C setup
 - **[Software design](docs/software-design.md)** — architecture, modules, config schema, deployment
 - **[MQTT & Home Assistant](docs/mqtt-homeassistant.md)** — topic tree and auto-discovery spec
+- **[Auto-update](docs/auto-update.md)** — GHCR + Watchtower hands-off deployment
 - **[Roadmap](docs/roadmap.md)** — phased implementation plan
 - **[Vendor docs](Hardware%20Documentation/)** — Sequent HAT user guide, Sensirion SDP8xx datasheet
 

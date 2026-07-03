@@ -1,0 +1,16 @@
+# Keep the image build context small — only ship what the app needs.
+.git
+.github
+docs
+Hardware Documentation
+config/config.yaml
+deploy/.env
+README.md
+LICENSE
+**/__pycache__
+*.py[cod]
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.DS_Store

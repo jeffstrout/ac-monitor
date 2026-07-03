@@ -1,0 +1,10 @@
+# AC Monitor runtime dependencies (installed into the Docker image).
+# Versions intentionally left loose during design; pin before first deploy.
+
+paho-mqtt          # MQTT client + Home Assistant discovery
+fastapi            # web dashboard + REST API (incl. /api/version)
+uvicorn[standard]  # ASGI server for FastAPI
+pyyaml             # config.yaml loading
+smbus2             # I2C access to the Sensirion SDP810 pressure sensor
+SMioplus           # Sequent Home Automation HAT driver (opto inputs)
+# DS18B20 temps are read from /sys/bus/w1 — no library required.
