@@ -117,7 +117,7 @@ class Mqtt:
 @dataclass
 class Poll:
     interval_s: float = 5.0
-    fan_debounce_s: float = 3.0
+    fan_debounce_s: float = 5.0   # OPTO-5 sail-switch debounce (ignore vane flutter)
 
 
 @dataclass

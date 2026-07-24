@@ -7,7 +7,7 @@ units:
 
 poll:
   interval_s: 5           # how often to read all sensors
-  sail_debounce_s: 3      # ignore airflow changes shorter than this
+  fan_debounce_s: 5       # OPTO-5 sail switch: ignore flutter shorter than this (seconds)
 
 sensors:
   # 10K NTC thermistors (DROK B3950) on HAT analog inputs AD1-AD4. Each thermistor wires

@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 
 from .config import Config
+from .debounce import Debouncer
 from .derive import Derived
 from .hat import Readings
 
@@ -21,6 +22,11 @@ class AppState:
     last_poll_at: float | None = None
     poll_count: int = 0
     consecutive_errors: int = 0
+    fan_debouncer: Debouncer | None = None
+
+    def __post_init__(self) -> None:
+        if self.fan_debouncer is None:
+            self.fan_debouncer = Debouncer(self.config.poll.fan_debounce_s)
 
     def update(self, readings: Readings, derived: Derived, now: float) -> None:
         self.readings = readings
