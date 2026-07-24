@@ -41,6 +41,7 @@ and [docs/i2c-lockup.md](docs/i2c-lockup.md).
 - **[Hardware & wiring](docs/hardware.md)** — bill of materials, I/O map, wiring, HAT bring-up
 - **[Thermistor calibration](docs/calibration.md)** — conversion math + field calibration
 - **[I²C lockup investigation](docs/i2c-lockup.md)** — the intermittent HAT bus-lockup issue
+- **[Appliance build plan](docs/appliance-plan.md)** — the active plan: I/O map, Pi base config, architecture, control panel, deploy
 - **[Software design](docs/software-design.md)** — architecture, modules, config schema, deployment
 - **[MQTT & Home Assistant](docs/mqtt-homeassistant.md)** — topic tree and auto-discovery spec
 - **[Auto-update](docs/auto-update.md)** — GHCR + Watchtower hands-off deployment
