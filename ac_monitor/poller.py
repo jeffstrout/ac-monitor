@@ -12,6 +12,7 @@ import time
 
 from . import derive, display
 from .hat import HatBackend, IoplusBackend, read_all
+from .mqtt_out import MqttPublisher
 from .state import AppState
 
 
@@ -33,16 +34,24 @@ async def poll_loop(
 ) -> None:
     backend = backend or IoplusBackend(timeout_s=state.config.poll.interval_s + 2)
     interval = state.config.poll.interval_s
-    while stop is None or not stop.is_set():
-        try:
-            await asyncio.to_thread(poll_once, state, backend)
-        except Exception:  # pragma: no cover - defensive; poll_once already tolerates read errors
-            state.consecutive_errors += 1
-        try:
-            await asyncio.to_thread(display.maybe_push, state, time.time())
-        except Exception:  # pragma: no cover - a display push must never break the loop
-            pass
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=interval) if stop else await asyncio.sleep(interval)
-        except asyncio.TimeoutError:
-            pass
+    publisher = MqttPublisher()
+    try:
+        while stop is None or not stop.is_set():
+            try:
+                await asyncio.to_thread(poll_once, state, backend)
+            except Exception:  # pragma: no cover - poll_once already tolerates read errors
+                state.consecutive_errors += 1
+            try:
+                await asyncio.to_thread(display.maybe_push, state, time.time())
+            except Exception:  # pragma: no cover - a display push must never break the loop
+                pass
+            try:
+                await asyncio.to_thread(publisher.sync, state)
+            except Exception:  # pragma: no cover - an MQTT hiccup must never break the loop
+                pass
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval) if stop else await asyncio.sleep(interval)
+            except asyncio.TimeoutError:
+                pass
+    finally:
+        publisher.close()
