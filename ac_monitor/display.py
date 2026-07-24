@@ -21,7 +21,7 @@ from .derive import Derived
 
 def _t(readings: Readings | None, role: str, unit: str) -> str:
     v = readings.temps.get(role) if readings else None
-    return f"{v:.1f}{unit}" if v is not None else "--"
+    return f"{v:+.1f}{unit}" if v is not None else "--"   # explicit +/- sign
 
 
 def format_lines(readings: Readings | None, derived: Derived | None, unit: str) -> list[str]:
@@ -32,7 +32,7 @@ def format_lines(readings: Readings | None, derived: Derived | None, unit: str) 
         "AC MONITOR",
         f"RET {_t(readings, 'input_air', unit)}",
         f"SUP {_t(readings, 'output_air', unit)}",
-        f"DT  {f'{dt:.1f}{unit}' if dt is not None else '--'}",
+        f"DT  {f'{dt:+.1f}{unit}' if dt is not None else '--'}",
         f"SUC {_t(readings, 'suction_line', unit)}",
         f"LIQ {_t(readings, 'liquid_line', unit)}",
         f"FAN {fan_txt}",

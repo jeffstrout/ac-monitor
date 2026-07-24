@@ -75,14 +75,15 @@ async function saveMqtt(){ await post('/api/mqtt/config',{host:mqttHost.value,po
 async function capture(role,k){ await post('/api/calibrate/capture',{role:role,known_c:k}); refreshCal(); }
 async function resetCal(role){ await post('/api/calibrate/reset',{role:role}); refreshCal(); }
 function pill(el,on){ el.className='pill '+(on?'on':'off'); el.textContent=on?'ON':'OFF'; }
+function sgn(x){ return (x>=0?'+':'')+x.toFixed(1); }   // explicit +/- sign
 
 async function refresh(){
  let s; try{ s=await j('/api/state'); }catch(e){ return; }
  const u=s.unit;
- dt.textContent = s.delta_t==null?'–':s.delta_t.toFixed(1)+'°'+u;
+ dt.textContent = s.delta_t==null?'–':sgn(s.delta_t)+'°'+u;
  mode.textContent = s.mode?('('+s.mode+')'):'';
  temps.innerHTML='<tr><th>Channel</th><th>Temp</th></tr>'+Object.entries(s.temps).map(([k,v])=>{
-   const val=s.health[k]&&v!=null? v.toFixed(1)+'°'+u : '<span class=fail>FAIL</span>';
+   const val=s.health[k]&&v!=null? sgn(v)+'°'+u : '<span class=fail>FAIL</span>';
    return `<tr><td>${k}</td><td>${val}</td></tr>`;}).join('');
  fan.textContent = s.fan_running==null?'FAIL':(s.fan_running?'RUNNING':'IDLE');
  bus.innerHTML = s.i2c_ok?'<span class=ok>OK</span>':'<span class=fault>DOWN</span>';
