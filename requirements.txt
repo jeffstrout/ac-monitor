@@ -6,5 +6,4 @@ fastapi            # web dashboard + REST API (incl. /api/version)
 uvicorn[standard]  # ASGI server for FastAPI
 pyyaml             # config.yaml loading
 SMioplus           # Sequent Home Automation HAT driver (opto inputs + analog reads)
-# DS18B20 temps are read from /sys/bus/w1 — no library required.
-# Setra 265 pressure is read as an analog voltage via SMioplus — no extra library.
+# Temperatures: 10k NTC thermistors read as analog volts via SMioplus (AD1-AD4).
