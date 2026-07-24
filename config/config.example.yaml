@@ -53,7 +53,7 @@ thresholds:
 
 # Split-flap display push (toggle + target set from the web control panel).
 display:
-  enabled: false            # push readings to the split-flap
+  enabled: true             # push readings to the split-flap (on by default)
   base_url: "http://192.168.0.17:8080"
   slot: 2                   # POST /api/screens/<slot>
   refresh_s: 30

@@ -24,7 +24,10 @@ class MockBackend:
 
 
 def _client(adc=None, opto=None):
-    cfg = cfgmod.from_dict({"units": {"temperature": "F"}, "poll": {"interval_s": 60}})
+    # display disabled so the background poller makes no network push in tests.
+    cfg = cfgmod.from_dict(
+        {"units": {"temperature": "F"}, "poll": {"interval_s": 60}, "display": {"enabled": False}}
+    )
     state = AppState(config=cfg)
     a = {1: 1.60, 2: 1.20, 3: 1.30, 4: 1.10} if adc is None else adc
     o = {5: 1} if opto is None else opto

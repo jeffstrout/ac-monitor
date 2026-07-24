@@ -26,6 +26,7 @@ def test_defaults_when_empty():
     assert cfg.thermistors.beta == 3950.0
     assert cfg.thermistors.channels["output_air"] == 1
     assert cfg.display.slot == 2
+    assert cfg.display.enabled is True     # display push on by default
     assert cfg.mqtt.enabled is False
 
 
