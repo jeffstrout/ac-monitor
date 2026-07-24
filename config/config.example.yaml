@@ -73,3 +73,11 @@ mqtt:
 web:
   host: "0.0.0.0"
   port: 8000
+
+# Sequent HAT hardware watchdog. If enabled, the app pets it every poll; if the
+# app or Pi hangs, the HAT power-cycles the Pi (recovery for an unattended
+# appliance). Off by default — enable after verifying it recovers the I2C
+# lockup on your hardware (docs/i2c-lockup.md).
+watchdog:
+  enabled: false
+  period_s: 120

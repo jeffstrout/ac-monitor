@@ -99,6 +99,13 @@ class IoplusBackend:
     def read_opto(self, stack: int, channel: int) -> int:
         return int(float(self._run(str(stack), "optrd", str(channel))))
 
+    def set_watchdog_period(self, stack: int, seconds: int) -> None:
+        self._run(str(stack), "wdtpwr", str(seconds))
+
+    def pet_watchdog(self, stack: int) -> None:
+        """Reload the HAT watchdog (arms it on the first call)."""
+        self._run(str(stack), "wdtr")
+
 
 # --- aggregation -------------------------------------------------------------
 
