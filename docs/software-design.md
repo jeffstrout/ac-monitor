@@ -21,9 +21,8 @@ no code exists yet.
 | Concern | Choice | Why |
 |---|---|---|
 | Language | Python 3.11+ | Sequent ships a Python library; rich sensor ecosystem |
-| HAT opto inputs | Sequent `SMioplus` library | Official driver for the Home Automation HAT |
-| 1-Wire temps | Linux `w1` sysfs (`/sys/bus/w1/devices`) | Kernel-native, no extra driver |
-| Pressure sensor | Sequent `SMioplus` analog read (`AD1`) | Setra 265 4–20 mA → 150 Ω sense R → HAT ADC |
+| HAT opto inputs | Sequent `SMioplus` library / `ioplus` CLI | Official driver for the Home Automation HAT |
+| Temperatures | Sequent `SMioplus` analog read (`AD1`–`AD4`) | 10 kΩ NTC thermistors on the HAT ADC; convert volts → °C in software (see [calibration.md](calibration.md)) |
 | MQTT | `paho-mqtt` | De-facto standard, HA-friendly |
 | Web | FastAPI + Uvicorn | Async, tiny, serves API + static dashboard |
 | Config | YAML (`pyyaml`) | Human-editable sensor mapping/calibration |
@@ -40,8 +39,7 @@ ac_monitor/
 ├── __init__.py
 ├── config.py            # load & validate config.yaml -> typed settings
 ├── sensors/
-│   ├── onewire.py       # DS18B20 discovery + read by ROM id
-│   ├── pressure.py      # Setra 265 analog read via HAT ADC -> volts -> inH2O
+│   ├── thermistor.py    # HAT ADC read -> volts -> resistance -> °C (Beta + calibration)
 │   └── digital.py       # HAT opto inputs (sail switch; future call signals)
 ├── core/
 │   ├── poller.py        # async loop; reads all sensors each tick
@@ -66,9 +64,9 @@ also what makes the [auto-update pipeline](auto-update.md) go live.
 Reading        = { key, value, unit, timestamp, healthy: bool }
 SystemState    = {
     temps:     { suction_line, liquid_line, input_air, output_air }  # °C (or °F per config)
-    pressure_inh2o, pressure_volts                       # Setra 265 (volts = raw, diagnostic)
+    temp_volts: { suction_line, liquid_line, input_air, output_air } # raw ADC volts (diagnostic)
     airflow:   bool                                      # sail switch
-    derived:   { delta_t, filter_loading_pct?, faults[] }
+    derived:   { delta_t, faults[] }
     updated_at
 }
 ```
@@ -79,15 +77,17 @@ SystemState    = {
 - **Refrigerant line temps** = suction & liquid line readings — trend/fault indicators
   (warm suction → low charge/airflow; very hot liquid → overcharge/dirty condenser).
 - **Airflow proof** = sail switch state (boolean).
-- **Filter/coil ΔP** = Setra 265 reading, converted from ADC volts to inH₂O.
 - **Faults** (each a named boolean the dashboard/MQTT expose):
   - `no_airflow` — sail switch open for longer than a debounce window.
   - `airflow_no_call` *(enabled once thermostat signals are added)* — air moving but no
     W/Y/G call, or vice-versa.
   - `abnormal_delta_t` — ΔT outside a configurable heating/cooling band (e.g. cooling ΔT
     should be ~15–22 °F; too low → low charge/airflow, too high → restricted airflow).
-  - `high_filter_dp` — ΔP above a configurable threshold → change the filter.
-  - `sensor_fault` — any probe/bus read failing.
+  - `sensor_fault` — any thermistor/HAT read failing.
+
+> **Filter loading** was previously derived from a differential-pressure sensor (Setra 265),
+> now dropped from the design. It could be reintroduced later — a supply/return air-temp
+> spread or a re-added ΔP sensor — but there is no filter-pressure metric today.
 
 Thresholds live in `config.yaml` so they can be tuned to this specific system.
 
@@ -105,13 +105,12 @@ Thresholds live in `config.yaml` so they can be tuned to this specific system.
 See [`config/config.example.yaml`](../config/config.example.yaml). Highlights:
 
 - `units.temperature`: `C` or `F`.
-- `sensors.onewire`: map each DS18B20 ROM id → role (`suction_line`, `liquid_line`,
-  `input_air`, `output_air`).
-- `sensors.pressure`: HAT ADC channel, full-scale range, and the two-point
-  `volts → inH₂O` calibration for the Setra 265 (4–20 mA + 150 Ω sense resistor).
+- `sensors.thermistors`: HAT stack level, the Beta/nominal/pull-up constants, the two-point
+  field calibration (`gain`/`offset`), and the AD channel → role map (`suction_line`,
+  `liquid_line`, `input_air`, `output_air`). See [calibration.md](calibration.md).
 - `sensors.digital`: HAT stack level + opto channel for the sail switch.
 - `mqtt`: broker host/port/credentials, base topic, HA discovery prefix.
-- `thresholds`: ΔT band, filter ΔP limit, debounce windows.
+- `thresholds`: ΔT band, debounce windows.
 - `web`: bind host/port.
 
 ## 8. Deployment
@@ -123,13 +122,13 @@ The Pi pulls a prebuilt multi-arch image from GHCR and self-updates via Watchtow
 whenever a PR merges to `main`. Files: [`deploy/Dockerfile`](../deploy/Dockerfile),
 [`deploy/docker-compose.yml`](../deploy/docker-compose.yml),
 [`.github/workflows/docker-publish.yml`](../.github/workflows/docker-publish.yml).
-The container runs `privileged` for I²C + 1-Wire access; `/data` holds the config
+The container runs `privileged` for I²C (HAT) access; `/data` holds the config
 and persisted state across updates.
 
 **B. Bare-metal systemd (alternative)** — install into a virtualenv at
 `/opt/ac-monitor`; a `deploy/ac-monitor.service` unit runs `python -m ac_monitor`
 with `Restart=on-failure` after `network-online.target`; an `install.sh` enables
-I²C + 1-Wire, creates the venv, installs deps, and enables the service. (No
+I²C, creates the venv, installs deps, and enables the service. (No
 hands-off updates on this path — you'd `git pull` + restart yourself.)
 
 **Build provenance / `/api/version`.** The image bakes `APP_COMMIT` and
@@ -143,6 +142,6 @@ reliability (documented in the Sequent user guide).
 ## 9. Testing strategy
 
 - **Unit**: `derive.py` fault logic and unit conversions with synthetic readings.
-- **Sensor mocks**: fake `onewire`/`pressure`/`digital` backends so the poller, web API,
+- **Sensor mocks**: fake `thermistor`/`digital` backends so the poller, web API,
   and MQTT discovery can be tested off-Pi.
 - **On-Pi smoke test**: a `--selftest` flag that reads each sensor once and prints a table.

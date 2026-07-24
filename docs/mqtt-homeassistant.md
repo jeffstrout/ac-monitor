@@ -26,14 +26,10 @@ ac_monitor/
 │   ├── liquid_line              #        (refrigerant liquid line)
 │   ├── input_air                #        (return air into the coil)
 │   └── output_air               #        (supply air out of the coil)
-├── pressure/
-│   ├── inh2o                    # differential pressure, inH2O (Setra 265)
-│   └── volts                    # raw divided ADC volts (diagnostic)
 ├── airflow                      # "ON"/"OFF" (sail switch)
 └── derived/
     ├── delta_t                  # air-side ΔT = input_air - output_air
-    ├── filter_dp_pct            # optional, % of configured full-scale range
-    └── fault/<name>             # "ON"/"OFF" per fault (no_airflow, high_filter_dp, ...)
+    └── fault/<name>             # "ON"/"OFF" per fault (no_airflow, abnormal_delta_t, ...)
 ```
 
 ## 3. Home Assistant entities
@@ -45,11 +41,8 @@ ac_monitor/
 | Input Air Temp | sensor | `temperature/input_air` | `temperature` |
 | Output Air Temp | sensor | `temperature/output_air` | `temperature` |
 | Air ΔT | sensor | `derived/delta_t` | `temperature` (Δ) |
-| Filter/Coil Pressure | sensor | `pressure/inh2o` | (custom unit inH₂O) |
-| Pressure Signal | sensor | `pressure/volts` | `voltage` (diagnostic) |
 | Airflow | binary_sensor | `airflow` | `running` / `moving` |
 | No-Airflow Fault | binary_sensor | `derived/fault/no_airflow` | `problem` |
-| High Filter ΔP | binary_sensor | `derived/fault/high_filter_dp` | `problem` |
 | Abnormal ΔT | binary_sensor | `derived/fault/abnormal_delta_t` | `problem` |
 | Sensor Fault | binary_sensor | `derived/fault/sensor_fault` | `problem` |
 
@@ -94,9 +87,8 @@ And a binary sensor at `homeassistant/binary_sensor/ac_monitor/airflow/config`:
 
 ## 5. Suggested Home Assistant use
 
-- **Dashboard card** grouping the four temps + air ΔT + airflow + filter ΔP.
+- **Dashboard card** grouping the four temps + air ΔT + airflow.
 - **Automations / alerts:**
-  - Filter ΔP over threshold → notify "change the air filter."
   - No airflow while a call is active *(once call signals exist)* → notify "possible
     blower/belt failure."
   - Abnormal cooling ΔT → notify "check charge / airflow."

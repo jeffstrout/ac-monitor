@@ -1,5 +1,5 @@
 # AC Monitor — example configuration
-# Copy to config.yaml and fill in the real DS18B20 ROM ids and MQTT credentials.
+# Copy to config.yaml and fill in the real thermistor calibration and MQTT credentials.
 # This file documents the intended config schema; the loader/validator is Phase 2.
 
 units:
@@ -10,27 +10,28 @@ poll:
   sail_debounce_s: 3      # ignore airflow changes shorter than this
 
 sensors:
-  # Map each DS18B20's unique ROM id (from /sys/bus/w1/devices/28-*) to a role.
-  onewire:
-    suction_line: "28-000000000000"   # refrigerant suction line
-    liquid_line:  "28-000000000001"   # refrigerant liquid line
-    input_air:    "28-000000000002"   # return air entering the coil
-    output_air:   "28-000000000003"   # supply air leaving the coil
-
-  # Setra Model 265 P/N 26512R5WD11T1C (0-2.5" W.C. unidirectional, 4-20 mA output),
-  # 2-wire loop powered from 24 VDC; a 150 ohm sense resistor across AD1->GND
-  # converts the loop current to a voltage the HAT analog input reads.
-  pressure:
+  # 10K NTC thermistors (DROK B3950) on HAT analog inputs AD1-AD4. Each thermistor wires
+  # ADx -> that connector's GND (pin 1); the HAT's internal 15k pull-up to 3.3V forms the
+  # divider. Read raw volts via SMioplus/ioplus adcrd, then convert in software:
+  #   R = r_pullup * V / (vref - V)
+  #   1/T(K) = 1/298.15 + (1/beta) * ln(R / r_nominal)
+  #   true_C = gain * (T - 273.15) + offset      # two-point ice/boiling field calibration
+  # See docs/calibration.md for the derivation and measured values.
+  thermistors:
     hat_stack_level: 0
-    adc_channel: 1          # HAT analog input AD1
-    range_inh2o: 2.5        # sensor full-scale (unidirectional; 20 mA = this value)
-    # Two-point linear map of measured ADC volts -> inH2O (refine with a manometer).
-    # Defaults reflect a 150 ohm sense resistor + the input's 15k pull-up to 3.3V:
-    #   4 mA  (0" W.C.)  -> ~0.63 V ;  20 mA (full scale) -> ~3.00 V
-    calibration:
-      volts_at_zero: 0.63   # ADC volts at 0" W.C. (4 mA)
-      volts_at_full: 3.00   # ADC volts at range_inh2o (20 mA)
-    invert: false           # true if tubing polarity reads a loaded filter as negative
+    beta: 3950              # DROK B3950
+    r_nominal: 10000        # ohms at 25 C
+    r_pullup: 15000         # HAT internal analog-input pull-up
+    vref: 3.3               # pull-up rail (measured ~3.31)
+    calibration:            # true_C = gain * reading_C + offset (from ice + Tyler-TX boil)
+      gain: 1.024
+      offset: -1.20
+    # AD channel (1-8) -> role. Wiring per docs/hardware.md.
+    channels:
+      suction_line: 1       # AD1  (refrigerant suction line)
+      liquid_line:  2       # AD2  (refrigerant liquid line)
+      input_air:    3       # AD3  (return air entering the coil)
+      output_air:   4       # AD4  (supply air leaving the coil)
 
   # HAT opto-isolated digital inputs (Sequent Home Automation HAT).
   digital:
@@ -49,8 +50,6 @@ thresholds:
     cooling_max_f: 22
     heating_min_f: 25     # expected heating ΔT band
     heating_max_f: 70
-  filter_dp:
-    high_inh2o: 1.0       # alert above this differential pressure (change filter)
 
 mqtt:
   host: "192.168.1.10"
