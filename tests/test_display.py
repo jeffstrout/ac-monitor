@@ -20,9 +20,9 @@ def test_format_lines_full():
     d = Derived(delta_t=17.2)
     lines = display.format_lines(r, d, "F")
     assert lines[0] == "AC MONITOR"
-    assert "RET 72.5F" in lines
-    assert "SUP 55.3F" in lines
-    assert "DT  17.2F" in lines
+    assert "RET +72.5F" in lines
+    assert "SUP +55.3F" in lines
+    assert "DT  +17.2F" in lines
     assert "FAN RUN" in lines
     assert len(lines) == 7
     assert all(len(x) <= 24 for x in lines)
@@ -34,10 +34,20 @@ def test_format_lines_missing_channel_shows_dashes():
     r.health = {"input_air": True}
     r.fan_running = None
     lines = display.format_lines(r, Derived(delta_t=None), "F")
-    assert "RET 72.5F" in lines
+    assert "RET +72.5F" in lines
     assert "SUP --" in lines
     assert "DT  --" in lines
     assert "FAN --" in lines
+
+
+def test_format_lines_negative_temp_keeps_minus():
+    r = Readings(unit="F")
+    r.temps = {"suction_line": -5.3}
+    r.health = {"suction_line": True}
+    r.fan_running = True
+    lines = display.format_lines(r, Derived(delta_t=-3.1), "F")
+    assert "SUC -5.3F" in lines      # negative keeps its minus
+    assert "DT  -3.1F" in lines
 
 
 class _Recorder:
