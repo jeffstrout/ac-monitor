@@ -127,6 +127,16 @@ class Web:
 
 
 @dataclass
+class Watchdog:
+    """Sequent HAT hardware watchdog. When enabled, the poller pets it every
+    tick; if the app/Pi hangs and stops petting, the HAT power-cycles the Pi.
+    Off by default — enable once verified against the lockup (see i2c-lockup.md)."""
+
+    enabled: bool = False
+    period_s: int = 120
+
+
+@dataclass
 class Config:
     temperature_unit: str = "F"          # "C" or "F"
     poll: Poll = field(default_factory=Poll)
@@ -136,6 +146,7 @@ class Config:
     display: Display = field(default_factory=Display)
     mqtt: Mqtt = field(default_factory=Mqtt)
     web: Web = field(default_factory=Web)
+    watchdog: Watchdog = field(default_factory=Watchdog)
 
 
 # --- loading -----------------------------------------------------------------
@@ -186,6 +197,7 @@ def from_dict(data: dict[str, Any]) -> Config:
     disp = data.get("display") or {}
     mqtt = data.get("mqtt") or {}
     web = data.get("web") or {}
+    wd = data.get("watchdog") or {}
     sensors = data.get("sensors") or {}
 
     cfg = Config(
@@ -223,6 +235,10 @@ def from_dict(data: dict[str, Any]) -> Config:
             retain=bool(mqtt.get("retain", True)),
         ),
         web=Web(host=str(web.get("host", "0.0.0.0")), port=int(web.get("port", 8000))),
+        watchdog=Watchdog(
+            enabled=bool(wd.get("enabled", False)),
+            period_s=int(wd.get("period_s", Watchdog.period_s)),
+        ),
     )
     validate(cfg)
     return cfg
@@ -290,6 +306,8 @@ def validate(cfg: Config) -> None:
         raise ConfigError("display.slot must be 1..6")
     if cfg.mqtt.enabled and not cfg.mqtt.host:
         raise ConfigError("mqtt.enabled is true but mqtt.host is empty")
+    if cfg.watchdog.period_s <= 0:
+        raise ConfigError("watchdog.period_s must be > 0")
 
 
 # --- saving (for the control panel to persist edits) -------------------------
@@ -321,6 +339,7 @@ def to_dict(cfg: Config) -> dict[str, Any]:
         "display": asdict(cfg.display),
         "mqtt": asdict(cfg.mqtt),
         "web": asdict(cfg.web),
+        "watchdog": asdict(cfg.watchdog),
     }
 
 

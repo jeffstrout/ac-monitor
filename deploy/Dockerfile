@@ -10,8 +10,21 @@
 #
 # Build context is the repo root:  docker build -f deploy/Dockerfile .
 
+# --- stage 1: compile the Sequent `ioplus` CLI ------------------------------
+# The app reads the HAT by shelling out to `ioplus` (the interface verified on
+# the bench). It's a small C program, not a pip package, so we build it here and
+# copy just the binary into the slim runtime.
+FROM python:3.11-slim-bookworm AS ioplus-builder
+RUN apt-get update && apt-get install -y --no-install-recommends git build-essential \
+    && git clone --depth 1 https://github.com/SequentMicrosystems/ioplus-rpi.git /src \
+    && make -C /src install
+
+# --- stage 2: runtime -------------------------------------------------------
 FROM python:3.11-slim-bookworm AS runtime
 WORKDIR /app
+
+# The compiled ioplus CLI (used via subprocess by ac_monitor/hat.py).
+COPY --from=ioplus-builder /usr/local/bin/ioplus /usr/local/bin/ioplus
 
 # Build provenance baked into the image so the running app can report which
 # build it is (GET /api/version). CI passes these on every push to main; they
@@ -42,7 +55,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Application package (created in Phase 2 — see docs/software-design.md).
 COPY ac_monitor ./ac_monitor
 
-VOLUME ["/data"]      # config.yaml + persisted state survive updates/reboots
-EXPOSE 8000           # web dashboard + REST API
+# config.yaml + persisted state survive updates/reboots
+VOLUME ["/data"]
+# web dashboard + REST API
+EXPOSE 8000
 
 CMD ["python", "-m", "ac_monitor"]

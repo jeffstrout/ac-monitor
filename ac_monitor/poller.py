@@ -14,6 +14,7 @@ from . import derive, display
 from .hat import HatBackend, IoplusBackend, read_all
 from .mqtt_out import MqttPublisher
 from .state import AppState
+from .watchdog import Watchdog
 
 
 def poll_once(state: AppState, backend: HatBackend) -> None:
@@ -35,12 +36,21 @@ async def poll_loop(
     backend = backend or IoplusBackend(timeout_s=state.config.poll.interval_s + 2)
     interval = state.config.poll.interval_s
     publisher = MqttPublisher()
+    wd = None
+    if state.config.watchdog.enabled:
+        wd = Watchdog(backend, state.config.thermistors.hat_stack_level,
+                      state.config.watchdog.period_s)
     try:
         while stop is None or not stop.is_set():
             try:
                 await asyncio.to_thread(poll_once, state, backend)
             except Exception:  # pragma: no cover - poll_once already tolerates read errors
                 state.consecutive_errors += 1
+            if wd is not None:
+                try:
+                    await asyncio.to_thread(wd.pet)
+                except Exception:  # pragma: no cover
+                    pass
             try:
                 await asyncio.to_thread(display.maybe_push, state, time.time())
             except Exception:  # pragma: no cover - a display push must never break the loop

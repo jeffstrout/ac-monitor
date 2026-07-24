@@ -5,5 +5,7 @@ paho-mqtt          # MQTT client + Home Assistant discovery
 fastapi            # web dashboard + REST API (incl. /api/version)
 uvicorn[standard]  # ASGI server for FastAPI
 pyyaml             # config.yaml loading
-SMioplus           # Sequent Home Automation HAT driver (opto inputs + analog reads)
-# Temperatures: 10k NTC thermistors read as analog volts via SMioplus (AD1-AD4).
+# The HAT is read via the Sequent `ioplus` CLI (subprocess) — compiled into the
+# Docker image from SequentMicrosystems/ioplus-rpi (see deploy/Dockerfile), not
+# a pip package. Thermistors (AD1-AD4) are read as analog volts; conversion is
+# in ac_monitor/hat.py.
