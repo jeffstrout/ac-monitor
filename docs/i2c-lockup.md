@@ -1,7 +1,18 @@
 # I²C Bus Lockup — Investigation & Status
 
 Running record of an intermittent fault where the Sequent HAT stops responding on the I²C
-bus. **Open issue — leading theory identified, fix test in progress.**
+bus.
+
+> **UPDATE (2026-07-24): it's the HAT, not the Pi.** The clock-stretch theory below is
+> **disproven.** The exact same lockup — `pinctrl get 2,3` = `lo/lo`, `0x28` gone from the
+> bus, recovered only by a power cycle — reproduces on a **Raspberry Pi 5** (RP1 I²C, mode
+> `a3`), whose I²C is entirely different silicon from the 3B+'s Broadcom controller (mode
+> `a0`). Two different controllers, identical failure ⇒ the **Sequent HAT** is latching
+> SDA/SCL low. Next steps: (1) take it to Sequent support — reproducible on two different Pi
+> models is a strong "it's the card" report; (2) check the HAT's 5 V supply (a brownout of the
+> card's STM32 fits); (3) try a second HAT to separate defective-unit from design. Note the HAT
+> watchdog can't help on a Pi 5 powered via its own USB-C (it cuts *Pi* power, not the
+> separately-powered card).
 
 ## Symptom
 
