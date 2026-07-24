@@ -24,6 +24,7 @@ class AppState:
     poll_count: int = 0
     consecutive_errors: int = 0
     fan_debouncer: Debouncer | None = None
+    last_display_push: float | None = None
     # role -> list of (known_c, raw_c) calibration capture points.
     captures: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
 

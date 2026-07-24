@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from . import derive
+from . import derive, display
 from .hat import HatBackend, IoplusBackend, read_all
 from .state import AppState
 
@@ -38,6 +38,10 @@ async def poll_loop(
             await asyncio.to_thread(poll_once, state, backend)
         except Exception:  # pragma: no cover - defensive; poll_once already tolerates read errors
             state.consecutive_errors += 1
+        try:
+            await asyncio.to_thread(display.maybe_push, state, time.time())
+        except Exception:  # pragma: no cover - a display push must never break the loop
+            pass
         try:
             await asyncio.wait_for(stop.wait(), timeout=interval) if stop else await asyncio.sleep(interval)
         except asyncio.TimeoutError:
