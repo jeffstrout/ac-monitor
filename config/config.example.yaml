@@ -38,8 +38,8 @@ sensors:
   digital:
     hat_stack_level: 0
     fan:
-      opto_channel: 5       # OPTO-5: fan running (contact closed) vs idle
-      active_high: true     # fan running => contact closed => active
+      opto_channel: 5       # OPTO-5: airflow-proof sail switch (fan running vs idle)
+      active_high: true     # fan running => airflow => contact closed => active
     # Future (Phase 6) — thermostat call signals via 24 VAC pilot relays:
     # call_heat: { opto_channel: 2 }
     # call_cool: { opto_channel: 3 }
@@ -51,7 +51,17 @@ thresholds:
     heating_min_f: 25     # expected heating ΔT band
     heating_max_f: 70
 
+# Split-flap display push (toggle + target set from the web control panel).
+display:
+  enabled: false            # push readings to the split-flap
+  base_url: "http://192.168.0.17:8080"
+  slot: 2                   # POST /api/screens/<slot>
+  refresh_s: 30
+
+# MQTT / Home Assistant. Broker host/port/credentials are normally entered in the
+# web control panel and persisted here; `enabled` toggles publishing at runtime.
 mqtt:
+  enabled: false
   host: "192.168.1.10"
   port: 1883
   username: ""
