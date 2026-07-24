@@ -17,16 +17,26 @@ from .hat import Readings
 @dataclass
 class AppState:
     config: Config
+    config_path: str | None = None       # where to persist edits; None = in-memory only
     readings: Readings | None = None
     derived: Derived | None = None
     last_poll_at: float | None = None
     poll_count: int = 0
     consecutive_errors: int = 0
     fan_debouncer: Debouncer | None = None
+    # role -> list of (known_c, raw_c) calibration capture points.
+    captures: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.fan_debouncer is None:
             self.fan_debouncer = Debouncer(self.config.poll.fan_debounce_s)
+
+    def persist(self) -> None:
+        """Write the current config to disk if a path is set (best effort)."""
+        if self.config_path:
+            from . import config as configmod
+
+            configmod.save(self.config, self.config_path)
 
     def update(self, readings: Readings, derived: Derived, now: float) -> None:
         self.readings = readings
