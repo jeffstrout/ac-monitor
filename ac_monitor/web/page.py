@@ -60,9 +60,10 @@ DASHBOARD = """<!doctype html>
 </div>
 
 <h2>Calibration</h2>
-<p class="muted">Hold a probe at a known temperature, then capture. Two captures
- (ice + boiling) fit that channel's gain/offset. Boiling °C:
- <input id="boilC" value="99.4" style="width:5rem;display:inline-block"> (Tyler, TX)</p>
+<p class="muted">Dip a probe in water at a known temperature, read it with a good
+ thermometer, type that value into the channel's box and press Capture. Two
+ well-separated captures (e.g. cold and hot water) fit that channel's gain/offset
+ — they don't have to be exactly ice or boiling.</p>
 <div class="scroll"><table id="cal"></table></div>
 
 <p class="muted" id="foot"></p>
@@ -72,19 +73,30 @@ async function j(u,o){ return (await fetch(u,o)).json(); }
 async function post(u,b){ return j(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}); }
 async function toggle(w){ await post('/api/toggle/'+w,{}); refresh(); }
 async function saveMqtt(){ await post('/api/mqtt/config',{host:mqttHost.value,port:parseInt(mqttPort.value)||1883,username:mqttUser.value,password:mqttPass.value}); refresh(); }
-async function capture(role,k){ await post('/api/calibrate/capture',{role:role,known_c:k}); refreshCal(); }
+let curUnit='F';
+async function captureEntered(role){
+ const el=document.getElementById('cap_'+role);
+ const val=parseFloat(el.value);
+ if(isNaN(val)){ el.focus(); return; }
+ const kc=(curUnit==='F')?(val-32)*5/9:val;   // entered value is in the display unit -> °C
+ await post('/api/calibrate/capture',{role:role,known_c:kc});
+ el.value=''; refreshCal();
+}
 async function resetCal(role){ await post('/api/calibrate/reset',{role:role}); refreshCal(); }
 function pill(el,on){ el.className='pill '+(on?'on':'off'); el.textContent=on?'ON':'OFF'; }
 function sgn(x){ return (x>=0?'+':'')+x.toFixed(1); }   // explicit +/- sign
 
 async function refresh(){
  let s; try{ s=await j('/api/state'); }catch(e){ return; }
- const u=s.unit;
- dt.textContent = s.delta_t==null?'–':sgn(s.delta_t)+'°'+u;
+ const u=s.unit; curUnit=u;
+ const dtCell = s.delta_t==null?'–':sgn(s.delta_t)+'°'+u;
+ dt.textContent = dtCell;
  mode.textContent = s.mode?('('+s.mode+')'):'';
  temps.innerHTML='<tr><th>Channel</th><th>Temp</th></tr>'+Object.entries(s.temps).map(([k,v])=>{
    const val=s.health[k]&&v!=null? sgn(v)+'°'+u : '<span class=fail>FAIL</span>';
-   return `<tr><td>${k}</td><td>${val}</td></tr>`;}).join('');
+   let row=`<tr><td>${k}</td><td>${val}</td></tr>`;
+   if(k==='input_air') row+=`<tr><td>ΔT</td><td><b>${dtCell}</b></td></tr>`;   // ΔT after input air
+   return row;}).join('');
  fan.textContent = s.fan_running==null?'FAIL':(s.fan_running?'RUNNING':'IDLE');
  bus.innerHTML = s.i2c_ok?'<span class=ok>OK</span>':'<span class=fault>DOWN</span>';
  const af=Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);
@@ -95,13 +107,13 @@ async function refresh(){
 }
 async function refreshCal(){
  let c; try{ c=await j('/api/calibration'); }catch(e){ return; }
- const boil=parseFloat(boilC.value)||99.4;
- cal.innerHTML='<tr><th>Channel</th><th>gain</th><th>offset</th><th>captures</th><th>actions</th></tr>'+
+ cal.innerHTML='<tr><th>Channel</th><th>gain</th><th>offset</th><th>captures °C</th><th>actions</th></tr>'+
   Object.entries(c).map(([role,d])=>{
    const cap=d.captures.map(p=>`${p[0]}→${p[1]}`).join(', ');
    return `<tr><td>${role}${d.custom?' *':''}</td><td>${d.gain}</td><td>${d.offset}</td>`+
-    `<td class=muted>${cap}</td><td><button onclick="capture('${role}',0)">Ice 0°</button>`+
-    `<button onclick="capture('${role}',${boil})">Boil</button>`+
+    `<td class=muted>${cap}</td><td>`+
+    `<input id="cap_${role}" placeholder="°${curUnit}" style="width:4.5rem">`+
+    `<button onclick="captureEntered('${role}')">Capture</button>`+
     `<button onclick="resetCal('${role}')">Reset</button></td></tr>`;}).join('');
 }
 refresh(); refreshCal(); setInterval(refresh,2000);

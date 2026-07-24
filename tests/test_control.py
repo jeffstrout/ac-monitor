@@ -17,7 +17,9 @@ class MockBackend:
 
 
 def _state(tmp_path):
-    cfg = cfgmod.from_dict({"units": {"temperature": "F"}, "poll": {"interval_s": 60}})
+    cfg = cfgmod.from_dict(
+        {"units": {"temperature": "F"}, "poll": {"interval_s": 60}, "display": {"enabled": False}}
+    )
     return AppState(config=cfg, config_path=str(tmp_path / "config.yaml"))
 
 

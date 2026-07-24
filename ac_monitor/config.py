@@ -94,9 +94,11 @@ class Thresholds:
 
 @dataclass
 class Display:
-    """Split-flap display push (see docs/appliance-plan.md §5)."""
+    """Split-flap display push (see docs/appliance-plan.md §5). On by default so
+    a fresh deploy shows readings without toggling; the setting persists once
+    changed."""
 
-    enabled: bool = False
+    enabled: bool = True
     base_url: str = "http://192.168.0.17:8080"
     slot: int = 2                # POST /api/screens/<slot>
     refresh_s: int = 30
@@ -219,7 +221,7 @@ def from_dict(data: dict[str, Any]) -> Config:
             )
         ),
         display=Display(
-            enabled=bool(disp.get("enabled", False)),
+            enabled=bool(disp.get("enabled", Display.enabled)),
             base_url=str(disp.get("base_url", Display.base_url)),
             slot=int(disp.get("slot", Display.slot)),
             refresh_s=int(disp.get("refresh_s", Display.refresh_s)),
