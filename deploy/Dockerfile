@@ -25,7 +25,7 @@ LABEL org.opencontainers.image.source="https://github.com/jeffstrout/ac-monitor"
       org.opencontainers.image.created="$BUILD_TIME"
 
 # tzdata so the dashboard/logs can honor a local timezone via TZ (slim base is
-# UTC-only). i2c-tools is handy for in-container debugging of the HAT/SDP810.
+# UTC-only). i2c-tools is handy for in-container debugging of the HAT over I2C.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         tzdata i2c-tools \
     && rm -rf /var/lib/apt/lists/*

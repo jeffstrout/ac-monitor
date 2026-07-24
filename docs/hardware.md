@@ -36,20 +36,25 @@ control/expansion.
 
 | HAT resource | Terminal | Assigned to | Type |
 |---|---|---|---|
-| Analog input 1 | `AD1` / `GND` | Thermistor — suction line | 0–3.3 V ADC |
-| Analog input 2 | `AD2` / `GND` | Thermistor — liquid line | 0–3.3 V ADC |
-| Analog input 3 | `AD3` / `GND` | Thermistor — input (return) air | 0–3.3 V ADC |
-| Analog input 4 | `AD4` / `GND` | Thermistor — output (supply) air | 0–3.3 V ADC |
-| Opto input 1 | `OPTO-1` / `GND` | Sail switch | Contact closure |
+| Analog input 1 | `AD1` / `GND` | Thermistor — output (supply) air | 0–3.3 V ADC |
+| Analog input 2 | `AD2` / `GND` | Thermistor — input (return) air | 0–3.3 V ADC |
+| Analog input 3 | `AD3` / `GND` | Thermistor — suction line | 0–3.3 V ADC |
+| Analog input 4 | `AD4` / `GND` | Thermistor — liquid line | 0–3.3 V ADC |
+| Opto input 5 | `OPTO-5` / bank-B `GND` | Fan running/idle | Contact closure |
 | Opto input 2 | `OPTO-2` | *(future)* Call for heat — W | Contact closure |
 | Opto input 3 | `OPTO-3` | *(future)* Call for cool — Y | Contact closure |
-| Opto input 4 | `OPTO-4` | *(future)* Fan — G | Contact closure |
 | Analog in 5–8 | `AD5`–`AD8` | Spare | 0–3.3 V |
 | Relays / 0–10 V / open-drain | — | Spare (future control) | — |
 
 > Analog inputs AD1–AD4 are the "Temperature Measurement, 4 of 8 channels" configuration
 > (User's Guide V5, p. 12). The AD1–AD4 connector pin order (top→bottom) is `GND` (1),
 > `AD4` (2), `AD3` (3), `AD2` (4), `AD1` (5).
+
+> **Note (pending confirmation):** the digital airflow input is now on **OPTO-5** ("fan
+> running/idle"), not OPTO-1. §5 (sail switch) and the §3 wiring diagram below still show
+> the airflow contact on OPTO-1 and will be updated once OPTO-5's source is confirmed —
+> either the sail switch relocated to OPTO-5, or a thermostat **G/fan** signal fed through a
+> 24 VAC pilot relay.
 
 ### Opto input terminals — two banks, second one reversed
 

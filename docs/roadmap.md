@@ -11,12 +11,18 @@ independently useful and testable.
   guarded off until the app package exists, so it activates automatically in
   Phase 2. See [auto-update.md](auto-update.md).
 
-## Phase 1 — Bench bring-up
-- Assemble Pi + HAT; enable I²C and 1-Wire.
-- Verify each DS18B20 enumerates under `/sys/bus/w1/devices` and record ROM ids.
-- Confirm the Setra 265 reads a sane voltage on `AD1` (e.g. `ioplus 0 adcrd 1`) and
-  scales to a plausible inH₂O value; sanity-check zero vs. a known ΔP.
-- Confirm the sail switch reads on HAT opto input 1.
+## Phase 1 — Bench bring-up 🔧 (in progress)
+- Assemble Pi + HAT; enable I²C. ✅
+- Verify the HAT answers on the bus (`i2cdetect -y 1` → `0x28`; `ioplus 0 board`). ✅
+- Read the 10 kΩ NTC thermistors on `AD1`–`AD4` (`ioplus 0 adcrd <ch>`), convert
+  volts → °C, and field-calibrate against ice + boiling. ✅ *(AD1/AD2 done; AD3/AD4
+  pending wiring — see [calibration.md](calibration.md))*
+- Confirm the sail switch reads on HAT opto input 1. ✅
+- **⚠ Open blocker — intermittent I²C bus lockup.** The HAT latches its bus and needs a
+  full power cycle to recover; it happens on the plain sensor-reading workload (~hours).
+  Leading theory is the Pi 3B+ I²C clock-stretch bug. Must be resolved or mitigated
+  (lower baud rate / software I²C / Pi 5 / HAT watchdog) before unattended deployment.
+  See [i2c-lockup.md](i2c-lockup.md).
 - Deliverable: a `--selftest` script that prints one reading from every sensor.
 
 ## Phase 2 — Core service
