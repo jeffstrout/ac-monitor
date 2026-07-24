@@ -50,11 +50,9 @@ control/expansion.
 > (User's Guide V5, p. 12). The AD1–AD4 connector pin order (top→bottom) is `GND` (1),
 > `AD4` (2), `AD3` (3), `AD2` (4), `AD1` (5).
 
-> **Note (pending confirmation):** the digital airflow input is now on **OPTO-5** ("fan
-> running/idle"), not OPTO-1. §5 (sail switch) and the §3 wiring diagram below still show
-> the airflow contact on OPTO-1 and will be updated once OPTO-5's source is confirmed —
-> either the sail switch relocated to OPTO-5, or a thermostat **G/fan** signal fed through a
-> 24 VAC pilot relay.
+> **Note:** the airflow-proof **sail switch is wired to OPTO-5** (bank B), indicating whether
+> the blower is running (fan running/idle). Earlier revisions used OPTO-1; §5 and the §3
+> wiring diagram reflect the OPTO-5 wiring.
 
 ### Opto input terminals — two banks, second one reversed
 
@@ -118,11 +116,11 @@ tie together with no fuse on the header path.
 ```mermaid
 flowchart LR
     subgraph FIELD["Air Handler / Refrigerant Lines"]
-      T1["Thermistor #1<br/>Suction line"]
-      T2["Thermistor #2<br/>Liquid line"]
-      T3["Thermistor #3<br/>Input air (return)"]
-      T4["Thermistor #4<br/>Output air (supply)"]
-      SAIL["Sail switch<br/>(airflow proof)"]
+      T1["Thermistor<br/>Output/supply air"]
+      T2["Thermistor<br/>Input/return air"]
+      T3["Thermistor<br/>Suction line"]
+      T4["Thermistor<br/>Liquid line"]
+      SAIL["Sail switch<br/>(fan-running proof)"]
     end
 
     subgraph HAT["Sequent Home Automation HAT"]
@@ -130,7 +128,7 @@ flowchart LR
       AD2["AD2 / GND"]
       AD3["AD3 / GND"]
       AD4["AD4 / GND"]
-      O1["OPTO-1 / GND"]
+      O5["OPTO-5 / bank-B GND"]
     end
 
     PI["Raspberry Pi 3B+"]
@@ -139,7 +137,7 @@ flowchart LR
     T2 --- AD2
     T3 --- AD3
     T4 --- AD4
-    SAIL --- O1
+    SAIL --- O5
     HAT -.stacked on.- PI
 ```
 
@@ -186,17 +184,18 @@ Quick read of one channel:
 ioplus 0 adcrd 1
 ```
 
-## 5. Sail switch (airflow proof)
+## 5. Sail switch (fan-running proof) — OPTO-5
 
-A sail switch is a simple SPDT dry contact that closes when duct airflow deflects its
-vane. Wire the **normally-open** contact between `OPTO-1` and bank A's `GND`:
+A sail switch is a simple SPDT dry contact that closes when duct airflow deflects its vane —
+so it reads whether the blower is actually running. Wire the **normally-open** contact
+between `OPTO-5` and **bank B's `GND`** (the two outermost pins of the right-edge connector):
 
-- Airflow present → contact closed → `ioplus 0 optrd 1` reads **1**.
-- No airflow → contact open → reads **0**.
+- Fan running (airflow) → contact closed → `ioplus 0 optrd 5` reads **1**.
+- Fan idle (no airflow) → contact open → reads **0**.
 
-The opto inputs already have a 1 kΩ pull-up to 5 V internally, so no external components
-are needed for a dry-contact sail switch. (Return the closure to bank A's own `GND` pin —
-see the opto bank table in §2.)
+The opto inputs already have a 1 kΩ pull-up to 5 V internally, so no external components are
+needed for a dry-contact sail switch. Return the closure to **bank B's own `GND`** pin (top of
+the right-edge connector) — see the opto bank table in §2.
 
 ## 6. Future: thermostat call signals (24 VAC)
 

@@ -22,7 +22,8 @@ Headline metric: **air-side ΔT = input − output = AD2 − AD1** (positive in 
 
 Each thermistor wires `ADx` → that connector's `GND` (pin 1); the HAT's internal 15 kΩ
 pull-up forms the divider. Conversion + calibration: see [calibration.md](calibration.md).
-*(Open: confirm whether OPTO-5 is the sail switch relocated or a thermostat G/fan signal.)*
+**OPTO-5 is the airflow-proof sail switch** (bank B) — it reads whether the blower is running;
+its open-longer-than-debounce state drives the `no_airflow` fault.
 
 ## 2. Raspberry Pi base config (one-time)
 
@@ -152,13 +153,13 @@ Because the HAT can latch its bus (see [i2c-lockup.md](i2c-lockup.md)):
 6. **`mqtt_out.py`** — publish + HA discovery + its toggle.
 7. **Dockerize + unguard CI + Watchtower + `PI-SETUP.md` + HAT watchdog.**
 
-## 8. Open items to confirm
+## 8. Decisions (resolved 2026-07-24, issue #11)
 
-- **OPTO-5 semantics** — sail switch relocated to OPTO-5, or a thermostat **G/fan** signal via
-  a 24 VAC pilot relay? Affects the `fan` role and the `no_airflow` fault. (hardware.md §5/§6
-  + wiring diagram update once confirmed.)
-- **MQTT broker** — host/port/credentials (`.env` + control panel).
-- **Cadences** — poll interval (5 s?) and display-refresh interval (30 s?).
-- **Image/repo visibility** — public GHCR image (repo stays private) vs. public repo.
-- **Filter loading** — dropped with the pressure sensor; reintroduce later (air-temp spread or
-  a re-added ΔP sensor) or leave out.
+- **OPTO-5** — ✅ the airflow-proof **sail switch** (fan running/idle); drives `no_airflow`.
+- **MQTT broker** — ✅ host/port/credentials are **entered in the web control panel** (persisted
+  to `/data/config.yaml`), not hard-coded.
+- **Cadences** — ✅ poll interval **5 s**, display refresh **30 s**.
+- **Visibility** — ✅ **public** is fine (public GHCR image; repo may be public too).
+
+Still deferred: **filter loading** (dropped with the pressure sensor) — reintroduce later via an
+air-temp spread or a re-added ΔP sensor, or leave out.
