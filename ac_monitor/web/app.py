@@ -1,7 +1,19 @@
-"""FastAPI app: dashboard + /api/state, /api/version, /healthz.
+"""FastAPI app: dashboard + control panel + JSON API.
 
-The poller runs as a background task started in the app lifespan; an initial
-synchronous poll populates state so the first page load has data.
+Routes:
+  GET  /                     dashboard + control panel
+  GET  /api/state            latest readings + derived + toggles
+  GET  /api/version          build provenance
+  GET  /api/calibration      per-channel gain/offset + capture points
+  GET  /healthz              200 if the bus is up, else 503
+  POST /api/toggle/display   flip display-push on/off
+  POST /api/toggle/mqtt      flip MQTT output on/off
+  POST /api/mqtt/config      set broker host/port/user/pass
+  POST /api/calibrate/capture  record a reading at a known temperature
+  POST /api/calibrate/manual   set gain/offset directly
+  POST /api/calibrate/reset    clear a channel's calibration
+
+The poller runs as a background task started in the app lifespan.
 """
 
 from __future__ import annotations
@@ -9,51 +21,53 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
 
-from ..config import Config
-from ..hat import HatBackend, IoplusBackend
+from .. import calibrate
+from ..config import Calibration
+from ..hat import HatBackend, HatError, IoplusBackend
 from ..poller import poll_loop, poll_once
 from ..state import AppState
 from ..version import get_version
+from .page import DASHBOARD
 
-_DASHBOARD = """<!doctype html>
-<title>AC Monitor</title>
-<style>
- body{font:15px system-ui,sans-serif;margin:2rem;max-width:640px}
- h1{font-size:1.3rem} table{border-collapse:collapse;width:100%}
- td,th{padding:.35rem .6rem;border-bottom:1px solid #ddd;text-align:left}
- .big{font-size:2rem;font-weight:600} .fault{color:#b00} .ok{color:#080}
- .muted{color:#888} .fail{color:#b00}
-</style>
-<h1>AC Monitor</h1>
-<p>Air-side ΔT: <span class="big" id="dt">–</span> <span id="mode" class="muted"></span></p>
-<table id="temps"></table>
-<p>Fan: <b id="fan">–</b> &nbsp; Bus: <b id="bus">–</b></p>
-<p id="faults"></p>
-<p class="muted" id="foot"></p>
-<script>
-async function tick(){
- let s; try{ s = await (await fetch('/api/state')).json(); }catch(e){ return; }
- const u = s.unit;
- document.getElementById('dt').textContent = s.delta_t==null?'–':s.delta_t.toFixed(1)+'°'+u;
- document.getElementById('mode').textContent = s.mode?('('+s.mode+')'):'';
- const rows = Object.entries(s.temps).map(([k,v])=>{
-   const ok = s.health[k];
-   const val = ok&&v!=null? v.toFixed(1)+'°'+u : '<span class=fail>FAIL</span>';
-   return `<tr><td>${k}</td><td>${val}</td></tr>`;}).join('');
- document.getElementById('temps').innerHTML = '<tr><th>Channel</th><th>Temp</th></tr>'+rows;
- document.getElementById('fan').textContent = s.fan_running==null?'FAIL':(s.fan_running?'RUNNING':'IDLE');
- document.getElementById('bus').innerHTML = s.i2c_ok?'<span class=ok>OK</span>':'<span class=fault>DOWN</span>';
- const active = Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);
- document.getElementById('faults').innerHTML = active.length? '<span class=fault>Faults: '+active.join(', ')+'</span>':'<span class=ok>No faults</span>';
- const v = s.version||{}; const t = s.last_poll_at? new Date(s.last_poll_at*1000).toLocaleTimeString():'–';
- document.getElementById('foot').textContent = `updated ${t} · poll #${s.poll_count} · build ${v.commit||''}`;
-}
-tick(); setInterval(tick, 2000);
-</script>
-"""
+
+class CaptureReq(BaseModel):
+    role: str
+    known_c: float
+
+
+class ManualCalReq(BaseModel):
+    role: str
+    gain: float
+    offset: float
+
+
+class RoleReq(BaseModel):
+    role: str
+
+
+class MqttCfgReq(BaseModel):
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    password: str | None = None
+
+
+def _calibration_view(state: AppState) -> dict:
+    t = state.config.thermistors
+    out = {}
+    for role in t.channels:
+        cal = t.calibration_for(role)
+        out[role] = {
+            "gain": cal.gain,
+            "offset": cal.offset,
+            "custom": role in t.channel_calibration,
+            "captures": state.captures.get(role, []),
+        }
+    return out
 
 
 def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
@@ -61,7 +75,7 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        try:  # one synchronous poll so the first request has data
+        try:
             await asyncio.to_thread(poll_once, state, backend)
         except Exception:
             pass
@@ -75,9 +89,13 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
 
     app = FastAPI(title="AC Monitor", lifespan=lifespan)
 
+    def _require_role(role: str) -> None:
+        if role not in state.config.thermistors.channels:
+            raise HTTPException(status_code=400, detail=f"unknown channel role: {role}")
+
     @app.get("/", response_class=HTMLResponse)
     def dashboard() -> str:
-        return _DASHBOARD
+        return DASHBOARD
 
     @app.get("/api/state")
     def api_state() -> JSONResponse:
@@ -89,20 +107,94 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
     def api_version() -> dict:
         return get_version()
 
+    @app.get("/api/calibration")
+    def api_calibration() -> dict:
+        return _calibration_view(state)
+
     @app.get("/healthz")
     def healthz() -> JSONResponse:
         ok = state.readings is not None and state.readings.i2c_ok
         return JSONResponse({"status": "ok" if ok else "degraded"}, status_code=200 if ok else 503)
 
+    @app.post("/api/toggle/display")
+    def toggle_display() -> dict:
+        state.config.display.enabled = not state.config.display.enabled
+        state.persist()
+        return {"display_push": state.config.display.enabled}
+
+    @app.post("/api/toggle/mqtt")
+    def toggle_mqtt() -> dict:
+        if not state.config.mqtt.enabled and not state.config.mqtt.host:
+            raise HTTPException(status_code=409, detail="set the MQTT broker host first")
+        state.config.mqtt.enabled = not state.config.mqtt.enabled
+        state.persist()
+        return {"mqtt": state.config.mqtt.enabled}
+
+    @app.post("/api/mqtt/config")
+    def mqtt_config(req: MqttCfgReq) -> dict:
+        m = state.config.mqtt
+        if req.host is not None:
+            m.host = req.host
+        if req.port is not None:
+            m.port = req.port
+        if req.username is not None:
+            m.username = req.username
+        if req.password is not None:
+            m.password = req.password
+        state.persist()
+        return {"host": m.host, "port": m.port, "username": m.username, "enabled": m.enabled}
+
+    @app.post("/api/calibrate/capture")
+    def calibrate_capture(req: CaptureReq) -> dict:
+        _require_role(req.role)
+        v = state.readings.volts.get(req.role) if state.readings else None
+        if v is None:
+            raise HTTPException(status_code=409, detail=f"{req.role} has no current reading")
+        try:
+            raw_c = calibrate.raw_celsius(v, state.config.thermistors)
+        except HatError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        pts = state.captures.setdefault(req.role, [])
+        pts.append((round(req.known_c, 3), round(raw_c, 3)))
+        result: dict = {"role": req.role, "captures": pts}
+        if len(pts) >= 2:
+            try:
+                cal = calibrate.fit(pts)
+            except ValueError as e:
+                result["error"] = str(e)
+            else:
+                state.config.thermistors.channel_calibration[req.role] = cal
+                state.persist()
+                result["calibration"] = {"gain": cal.gain, "offset": cal.offset}
+        return result
+
+    @app.post("/api/calibrate/manual")
+    def calibrate_manual(req: ManualCalReq) -> dict:
+        _require_role(req.role)
+        state.config.thermistors.channel_calibration[req.role] = Calibration(req.gain, req.offset)
+        state.persist()
+        return {"role": req.role, "gain": req.gain, "offset": req.offset}
+
+    @app.post("/api/calibrate/reset")
+    def calibrate_reset(req: RoleReq) -> dict:
+        _require_role(req.role)
+        state.captures.pop(req.role, None)
+        state.config.thermistors.channel_calibration.pop(req.role, None)
+        state.persist()
+        cal = state.config.thermistors.calibration
+        return {"role": req.role, "gain": cal.gain, "offset": cal.offset, "custom": False}
+
     return app
 
 
 def build_default_app(config_path: str = "config/config.yaml") -> FastAPI:
-    """Convenience for ``uvicorn ac_monitor.web.app:app`` in dev."""
+    """Convenience for ``uvicorn ac_monitor.web.app:build_default_app --factory``."""
     from .. import config as configmod
 
     try:
         cfg = configmod.load(config_path)
+        path = config_path
     except configmod.ConfigError:
         cfg = configmod.from_dict({})
-    return create_app(AppState(config=cfg))
+        path = None
+    return create_app(AppState(config=cfg, config_path=path))
