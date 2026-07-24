@@ -17,9 +17,13 @@ from .state import AppState
 
 def poll_once(state: AppState, backend: HatBackend) -> None:
     """One synchronous read+derive+update. Safe to call from a thread."""
+    now = time.time()
     readings = read_all(state.config, backend)
+    # Debounce the sail switch: the derived state, dashboard, MQTT, and the
+    # no_airflow fault all use the debounced value, not the raw flutter.
+    readings.fan_running = state.fan_debouncer.update(readings.fan_running, now)
     derived = derive.compute(readings, state.config)
-    state.update(readings, derived, time.time())
+    state.update(readings, derived, now)
 
 
 async def poll_loop(
