@@ -68,6 +68,46 @@ def test_stop_deenergizes():
     assert b.relay is False
 
 
+class FlakyOptoBackend:
+    """read_opto raises the first `fails` times, then follows the relay."""
+
+    def __init__(self, fails=1):
+        self.relay = False
+        self.fails = fails
+        self.calls = 0
+
+    def relay_write(self, stack, channel, on):
+        self.relay = on
+
+    def read_opto(self, stack, channel):
+        self.calls += 1
+        if self.calls <= self.fails:
+            raise RuntimeError("bus glitch")
+        return 1 if self.relay else 0
+
+
+class AlwaysRaiseOptoBackend:
+    def relay_write(self, stack, channel, on):
+        pass
+
+    def read_opto(self, stack, channel):
+        raise RuntimeError("not detected")
+
+
+def test_retry_recovers_from_transient():
+    rl = RelayLoopback(FlakyOptoBackend(fails=1), 0, 5, 5, 15)
+    rl.maybe_check(1000.0)                     # first read raises, retry succeeds
+    assert rl.result["ok"] is True and rl.checks == 1
+
+
+def test_persistent_error_surfaces_detail():
+    rl = RelayLoopback(AlwaysRaiseOptoBackend(), 0, 5, 5, 15)
+    rl.maybe_check(1000.0)
+    assert rl.result["ok"] is None
+    assert "read_opto" in rl.result["error"]   # actual exception surfaced, not a bare flag
+    assert rl.checks == 0
+
+
 def test_config_defaults_off():
     cfg = cfgmod.from_dict({})
     assert cfg.relay_selftest.enabled is False
