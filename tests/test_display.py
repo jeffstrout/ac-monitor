@@ -16,17 +16,18 @@ def _readings():
 
 
 def test_format_lines_full():
-    lines = display.format_lines(_readings(), Derived(delta_t=17.2), "F")
+    lines = display.format_lines(_readings(), Derived(delta_t=17.2, system_status="Cooling"), "F")
     assert lines[0] == "HVAC MONITOR"
     assert len(lines) == 7 and all(len(x) <= 24 for x in lines)
     body = "\n".join(lines)
-    assert "F" not in body      # °F units removed
+    assert "°" not in body      # °F units removed
     assert "." not in body      # decimals removed
     ret_row = next(l for l in lines if l.startswith("RET"))
     assert "RET +72" in ret_row and "SUC +40" in ret_row   # RET/SUC same (left/right) row
     sup_row = next(l for l in lines if l.startswith("SUP"))
     assert "SUP +55" in sup_row and "LIQ +90" in sup_row
-    assert "RUN" in lines[-1] and "DELTA T +17" in lines[-1]   # bottom: fan + Delta T spelled out
+    assert lines[5] == "DELTA T +17"        # line 6: Delta T, centered on push
+    assert lines[6] == "SYSTEM COOLING"     # line 7: system status, centered on push
 
 
 def test_format_lines_missing_channel_shows_dashes():
@@ -39,7 +40,8 @@ def test_format_lines_missing_channel_shows_dashes():
     assert "RET +72" in ret_row and "SUC --" in ret_row
     sup_row = next(l for l in lines if l.startswith("SUP"))
     assert "SUP --" in sup_row and "LIQ --" in sup_row
-    assert "DELTA T --" in lines[-1]
+    assert lines[5] == "DELTA T --"
+    assert lines[6] == "SYSTEM IDLE"        # default status when derived is idle
 
 
 def test_format_lines_negative_temp_keeps_minus():
@@ -47,9 +49,10 @@ def test_format_lines_negative_temp_keeps_minus():
     r.temps = {"suction_line": -5.3}
     r.health = {"suction_line": True}
     r.fan_running = True
-    lines = display.format_lines(r, Derived(delta_t=-3.1), "F")
+    lines = display.format_lines(r, Derived(delta_t=-3.1, system_status="Heating"), "F")
     assert any("SUC -5" in l for l in lines)      # -5.3 -> -5, minus kept
-    assert "DELTA T -3" in lines[-1]
+    assert lines[5] == "DELTA T -3"
+    assert lines[6] == "SYSTEM HEATING"
 
 
 class _Recorder:

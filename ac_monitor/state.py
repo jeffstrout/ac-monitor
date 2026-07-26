@@ -57,6 +57,7 @@ class AppState:
             "fan_running": r.fan_running if r else None,
             "delta_t": (d.delta_t if d else None),
             "mode": (d.mode if d else None),
+            "system_status": (d.system_status if d else "Idle"),
             "faults": (d.faults if d else {}),
             "health": r.health if r else {},
             "i2c_ok": r.i2c_ok if r else False,

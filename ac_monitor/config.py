@@ -85,6 +85,7 @@ class DeltaTThresholds:
     cooling_max_f: float = 22.0
     heating_min_f: float = 25.0
     heating_max_f: float = 70.0
+    status_deadband_f: float = 5.0   # |ΔT|>this (fan on) => Cooling/Heating, else Fan
 
 
 @dataclass
@@ -232,6 +233,7 @@ def from_dict(data: dict[str, Any]) -> Config:
                 cooling_max_f=float(thresh.get("cooling_max_f", 22.0)),
                 heating_min_f=float(thresh.get("heating_min_f", 25.0)),
                 heating_max_f=float(thresh.get("heating_max_f", 70.0)),
+                status_deadband_f=float(thresh.get("status_deadband_f", 5.0)),
             )
         ),
         display=Display(

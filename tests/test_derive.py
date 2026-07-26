@@ -60,3 +60,33 @@ def test_no_abnormal_when_fan_off():
 def test_any_fault_property():
     d = derive.compute(_readings(25, 15), CFG)
     assert d.any_fault is False
+
+
+# --- system status (fan + ΔT deadband) ---------------------------------------
+
+def test_status_idle_when_fan_off():
+    assert derive.compute(_readings(25, 15, fan=False), CFG).system_status == "Idle"
+
+
+def test_status_idle_when_fan_unknown():
+    assert derive.compute(_readings(25, 15, fan=None), CFG).system_status == "Idle"
+
+
+def test_status_cooling_above_deadband():
+    # input 25, output 15 -> ΔT +18 °F (> +5) with fan on -> Cooling.
+    assert derive.compute(_readings(25, 15), CFG).system_status == "Cooling"
+
+
+def test_status_heating_below_negative_deadband():
+    # output warmer -> ΔT -36 °F (< -5) -> Heating.
+    assert derive.compute(_readings(20, 40), CFG).system_status == "Heating"
+
+
+def test_status_fan_within_deadband():
+    # input 20, output 19 -> ΔT +1.8 °F, within ±5 -> Fan (moving air, no heat/cool).
+    assert derive.compute(_readings(20, 19), CFG).system_status == "Fan"
+
+
+def test_status_fan_when_air_probes_missing_but_fan_on():
+    r = _readings(None, None, fan=True, health={"suction_line": True, "fan": True})
+    assert derive.compute(r, CFG).system_status == "Fan"
