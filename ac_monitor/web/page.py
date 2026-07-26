@@ -111,7 +111,7 @@ async function refresh(){
  const rt=s.relay_selftest;
  relayTestResult.innerHTML = (s.toggles.relay_test&&rt)?
    `relay ${rt.relay_closed?'CLOSED':'OPEN'} → opto ${rt.opto_closed==null?'?':(rt.opto_closed?'CLOSED':'OPEN')} `+
-   (rt.ok===true?'<span class=ok>✓ match</span>':(rt.ok===false?'<span class=fault>✗ MISMATCH</span>':'<span class=fault>err</span>'))+
+   (rt.ok===true?'<span class=ok>✓ match</span>':(rt.ok===false?'<span class=fault>✗ MISMATCH</span>':'<span class=fault>'+(rt.error||'err')+'</span>'))+
    ` · ${rt.mismatches}/${rt.checks} mismatch`:'';
  const v=s.version||{}, t=s.last_poll_at?new Date(s.last_poll_at*1000).toLocaleTimeString():'–';
  foot.textContent=`updated ${t} · poll #${s.poll_count} · build ${v.commit||''}`;
