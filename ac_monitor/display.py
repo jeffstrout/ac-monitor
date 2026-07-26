@@ -25,16 +25,16 @@ def _t(readings: Readings | None, role: str) -> str:
 
 
 def _pair(label: str, value: str) -> str:
-    """'LBL  +NN' — label + value right-justified to a fixed 4-col field so the
-    two rows' values stack vertically."""
-    return f"{label} {value:>4}"        # 3 + 1 + 4 = 8 cols
+    """'LBL  VAL' — label, a 2-col gap, then the value (right-justified to 3
+    cols so short values stack under wider ones)."""
+    return f"{label}  {value:>3}"       # 3 + 2 + 3 = 8 cols (typical)
 
 
 def _row(left_label: str, left_val: str, right_label: str, right_val: str) -> str:
-    """Both temp pairs as one block, flush against the display's right edge
-    (24 cols) so the whole line of data sits in the right columns."""
-    block = f"{_pair(left_label, left_val)}  {_pair(right_label, right_val)}"
-    return block.rjust(24)[:24]
+    """RET/SUP nudged right 2 cols; SUC/LIQ start mid-line. Each label sits a
+    tight 2-col gap from its value."""
+    line = f"  {_pair(left_label, left_val)}  {_pair(right_label, right_val)}"
+    return line.ljust(24)[:24]
 
 
 def format_lines(readings: Readings | None, derived: Derived | None, unit: str) -> list[str]:
