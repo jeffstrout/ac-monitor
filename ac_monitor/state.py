@@ -25,6 +25,7 @@ class AppState:
     consecutive_errors: int = 0
     fan_debouncer: Debouncer | None = None
     last_display_push: float | None = None
+    relay_selftest: dict | None = None       # latest relay↔opto loopback result
     # role -> list of (known_c, raw_c) calibration capture points.
     captures: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
 
@@ -62,7 +63,9 @@ class AppState:
             "toggles": {
                 "display_push": self.config.display.enabled,
                 "mqtt": self.config.mqtt.enabled,
+                "relay_test": self.config.relay_selftest.enabled,
             },
+            "relay_selftest": self.relay_selftest,
             "last_poll_at": self.last_poll_at,
             "poll_count": self.poll_count,
             "consecutive_errors": self.consecutive_errors,

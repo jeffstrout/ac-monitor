@@ -13,6 +13,7 @@ import time
 from . import derive, display
 from .hat import HatBackend, IoplusBackend, read_all
 from .mqtt_out import MqttPublisher
+from .relay_test import RelayLoopback
 from .state import AppState
 from .watchdog import Watchdog
 
@@ -36,10 +37,11 @@ async def poll_loop(
     backend = backend or IoplusBackend(timeout_s=state.config.poll.interval_s + 2)
     interval = state.config.poll.interval_s
     publisher = MqttPublisher()
+    stack = state.config.thermistors.hat_stack_level
     wd = None
     if state.config.watchdog.enabled:
-        wd = Watchdog(backend, state.config.thermistors.hat_stack_level,
-                      state.config.watchdog.period_s)
+        wd = Watchdog(backend, stack, state.config.watchdog.period_s)
+    rl = None
     try:
         while stop is None or not stop.is_set():
             try:
@@ -49,6 +51,18 @@ async def poll_loop(
             if wd is not None:
                 try:
                     await asyncio.to_thread(wd.pet)
+                except Exception:  # pragma: no cover
+                    pass
+            # Relay↔opto loopback self-test (created/torn down as the toggle flips).
+            rst = state.config.relay_selftest
+            if rst.enabled and rl is None:
+                rl = RelayLoopback(backend, stack, rst.relay_channel, rst.opto_channel, rst.interval_s)
+            elif not rst.enabled and rl is not None:
+                rl.stop(); rl = None; state.relay_selftest = None
+            if rl is not None:
+                try:
+                    await asyncio.to_thread(rl.maybe_check, time.time())
+                    state.relay_selftest = rl.result
                 except Exception:  # pragma: no cover
                     pass
             try:
@@ -64,4 +78,6 @@ async def poll_loop(
             except asyncio.TimeoutError:
                 pass
     finally:
+        if rl is not None:
+            rl.stop()
         publisher.close()

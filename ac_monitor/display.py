@@ -19,23 +19,29 @@ from .derive import Derived
 # display's own auto date/time). We push a compact 7-line screen.
 
 
-def _t(readings: Readings | None, role: str, unit: str) -> str:
+def _t(readings: Readings | None, role: str) -> str:
     v = readings.temps.get(role) if readings else None
-    return f"{v:+.1f}{unit}" if v is not None else "--"   # explicit +/- sign
+    return f"{v:+.0f}" if v is not None else "--"   # whole number, signed, no unit
+
+
+def _cols(left: str, right: str) -> str:
+    """Left label in the left half, right label in the right half (24 cols)."""
+    return f"{left:<12}{right:<12}"[:24]
 
 
 def format_lines(readings: Readings | None, derived: Derived | None, unit: str) -> list[str]:
     dt = derived.delta_t if derived else None
+    dt_txt = f"{dt:+.0f}" if dt is not None else "--"
     fan = None if readings is None else readings.fan_running
     fan_txt = "RUN" if fan else ("IDLE" if fan is not None else "--")
     return [
-        "AC MONITOR",
-        f"RET {_t(readings, 'input_air', unit)}",
-        f"SUP {_t(readings, 'output_air', unit)}",
-        f"DT  {f'{dt:+.1f}{unit}' if dt is not None else '--'}",
-        f"SUC {_t(readings, 'suction_line', unit)}",
-        f"LIQ {_t(readings, 'liquid_line', unit)}",
-        f"FAN {fan_txt}",
+        "HVAC MONITOR",
+        "",
+        _cols(f"RET {_t(readings, 'input_air')}", f"SUC {_t(readings, 'suction_line')}"),
+        _cols(f"SUP {_t(readings, 'output_air')}", f"LIQ {_t(readings, 'liquid_line')}"),
+        "",
+        "",
+        f"{fan_txt}   DELTA T {dt_txt}",
     ]
 
 

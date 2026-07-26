@@ -59,6 +59,11 @@ DASHBOARD = """<!doctype html>
  <button onclick="saveMqtt()">Save broker</button>
 </div>
 
+<div class="toggle">Relay↔Opto loopback test:
+ <span id="relayTestState" class="pill off">?</span>
+ <button onclick="toggle('relaytest')">Toggle</button>
+ <span id="relayTestResult" class="muted"></span></div>
+
 <h2>Calibration</h2>
 <p class="muted">Dip a probe in water at a known temperature, read it with a good
  thermometer, type that value into the channel's box and press Capture. Two
@@ -102,6 +107,12 @@ async function refresh(){
  const af=Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);
  faults.innerHTML = af.length?'<span class=fault>Faults: '+af.join(', ')+'</span>':'<span class=ok>No faults</span>';
  pill(displayState,s.toggles.display_push); pill(mqttState,s.toggles.mqtt);
+ pill(relayTestState,s.toggles.relay_test);
+ const rt=s.relay_selftest;
+ relayTestResult.innerHTML = (s.toggles.relay_test&&rt)?
+   `relay ${rt.relay_closed?'CLOSED':'OPEN'} → opto ${rt.opto_closed==null?'?':(rt.opto_closed?'CLOSED':'OPEN')} `+
+   (rt.ok===true?'<span class=ok>✓ match</span>':(rt.ok===false?'<span class=fault>✗ MISMATCH</span>':'<span class=fault>err</span>'))+
+   ` · ${rt.mismatches}/${rt.checks} mismatch`:'';
  const v=s.version||{}, t=s.last_poll_at?new Date(s.last_poll_at*1000).toLocaleTimeString():'–';
  foot.textContent=`updated ${t} · poll #${s.poll_count} · build ${v.commit||''}`;
 }

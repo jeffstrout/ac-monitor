@@ -130,6 +130,12 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
         state.persist()
         return {"mqtt": state.config.mqtt.enabled}
 
+    @app.post("/api/toggle/relaytest")
+    def toggle_relaytest() -> dict:
+        state.config.relay_selftest.enabled = not state.config.relay_selftest.enabled
+        state.persist()
+        return {"relay_test": state.config.relay_selftest.enabled}
+
     @app.post("/api/mqtt/config")
     def mqtt_config(req: MqttCfgReq) -> dict:
         m = state.config.mqtt
