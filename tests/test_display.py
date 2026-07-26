@@ -22,11 +22,15 @@ def test_format_lines_full():
     body = "\n".join(lines)
     assert "°" not in body      # °F units removed
     assert "." not in body      # decimals removed
-    ret_row = next(l for l in lines if l.startswith("RET"))
-    # values right-aligned in each 12-col half (moved to the right columns)
-    assert ret_row[:12].rstrip().endswith("+72") and ret_row[12:].rstrip().endswith("+40")
-    sup_row = next(l for l in lines if l.startswith("SUP"))
-    assert sup_row[:12].rstrip().endswith("+55") and sup_row[12:].rstrip().endswith("+90")
+    ret_row = next(l for l in lines if "RET" in l)
+    sup_row = next(l for l in lines if "SUP" in l)
+    # whole data block flush against the right edge (moved to the right columns)
+    assert len(ret_row) == 24 and ret_row.startswith(" ") and ret_row.endswith("+40")
+    assert len(sup_row) == 24 and sup_row.startswith(" ") and sup_row.endswith("+90")
+    assert "RET" in ret_row and "SUC" in ret_row     # both pairs on the same line
+    # the two rows' value columns line up vertically
+    assert ret_row.index("+72") == sup_row.index("+55")
+    assert ret_row.index("+40") == sup_row.index("+90")
     assert lines[5] == "DELTA T +17"        # line 6: Delta T, centered on push
     assert lines[6] == "SYSTEM COOLING"     # line 7: system status, centered on push
 
@@ -37,10 +41,10 @@ def test_format_lines_missing_channel_shows_dashes():
     r.health = {"input_air": True}
     r.fan_running = None
     lines = display.format_lines(r, Derived(delta_t=None), "F")
-    ret_row = next(l for l in lines if l.startswith("RET"))
-    assert ret_row[:12].rstrip().endswith("+72") and ret_row[12:].rstrip().endswith("--")
-    sup_row = next(l for l in lines if l.startswith("SUP"))
-    assert sup_row[:12].rstrip().endswith("--") and sup_row[12:].rstrip().endswith("--")
+    ret_row = next(l for l in lines if "RET" in l)
+    sup_row = next(l for l in lines if "SUP" in l)
+    assert "RET" in ret_row and "+72" in ret_row and ret_row.endswith("--")   # SUC missing -> --
+    assert sup_row.endswith("--") and "LIQ" in sup_row
     assert lines[5] == "DELTA T --"
     assert lines[6] == "SYSTEM IDLE"        # default status when derived is idle
 
@@ -51,8 +55,8 @@ def test_format_lines_negative_temp_keeps_minus():
     r.health = {"suction_line": True}
     r.fan_running = True
     lines = display.format_lines(r, Derived(delta_t=-3.1, system_status="Heating"), "F")
-    ret_row = next(l for l in lines if l.startswith("RET"))
-    assert ret_row[12:].rstrip().endswith("-5")   # suction -5.3 -> -5, minus kept, right-aligned
+    ret_row = next(l for l in lines if "SUC" in l)
+    assert ret_row.endswith("-5")     # suction -5.3 -> -5, minus kept, flush right
     assert lines[5] == "DELTA T -3"
     assert lines[6] == "SYSTEM HEATING"
 

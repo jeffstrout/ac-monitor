@@ -24,14 +24,17 @@ def _t(readings: Readings | None, role: str) -> str:
     return f"{v:+.0f}" if v is not None else "--"   # whole number, signed, no unit
 
 
-def _cell(label: str, value: str) -> str:
-    """One 12-col half: 3-char label on the left, value right-aligned in the
-    right columns (1-col trailing gap keeps it off the next half's label)."""
-    return f"{label}{value:>8} "        # 3 + 8 + 1 = 12 cols
+def _pair(label: str, value: str) -> str:
+    """'LBL  +NN' — label + value right-justified to a fixed 4-col field so the
+    two rows' values stack vertically."""
+    return f"{label} {value:>4}"        # 3 + 1 + 4 = 8 cols
 
 
 def _row(left_label: str, left_val: str, right_label: str, right_val: str) -> str:
-    return (_cell(left_label, left_val) + _cell(right_label, right_val))[:24]
+    """Both temp pairs as one block, flush against the display's right edge
+    (24 cols) so the whole line of data sits in the right columns."""
+    block = f"{_pair(left_label, left_val)}  {_pair(right_label, right_val)}"
+    return block.rjust(24)[:24]
 
 
 def format_lines(readings: Readings | None, derived: Derived | None, unit: str) -> list[str]:
