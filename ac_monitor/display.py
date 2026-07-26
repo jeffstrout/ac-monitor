@@ -24,9 +24,14 @@ def _t(readings: Readings | None, role: str) -> str:
     return f"{v:+.0f}" if v is not None else "--"   # whole number, signed, no unit
 
 
-def _cols(left: str, right: str) -> str:
-    """Left label in the left half, right label in the right half (24 cols)."""
-    return f"{left:<12}{right:<12}"[:24]
+def _cell(label: str, value: str) -> str:
+    """One 12-col half: 3-char label on the left, value right-aligned in the
+    right columns (1-col trailing gap keeps it off the next half's label)."""
+    return f"{label}{value:>8} "        # 3 + 8 + 1 = 12 cols
+
+
+def _row(left_label: str, left_val: str, right_label: str, right_val: str) -> str:
+    return (_cell(left_label, left_val) + _cell(right_label, right_val))[:24]
 
 
 def format_lines(readings: Readings | None, derived: Derived | None, unit: str) -> list[str]:
@@ -36,8 +41,8 @@ def format_lines(readings: Readings | None, derived: Derived | None, unit: str) 
     return [
         "HVAC MONITOR",
         "",
-        _cols(f"RET {_t(readings, 'input_air')}", f"SUC {_t(readings, 'suction_line')}"),
-        _cols(f"SUP {_t(readings, 'output_air')}", f"LIQ {_t(readings, 'liquid_line')}"),
+        _row("RET", _t(readings, "input_air"), "SUC", _t(readings, "suction_line")),
+        _row("SUP", _t(readings, "output_air"), "LIQ", _t(readings, "liquid_line")),
         "",
         f"DELTA T {dt_txt}",             # line 6, centered by push(align=center)
         f"SYSTEM {status.upper()}",      # line 7, centered
