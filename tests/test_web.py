@@ -43,7 +43,7 @@ def test_api_state_populated_after_startup():
         assert all(s["health"].values())
         assert s["poll_count"] >= 1
         assert s["delta_t"] is not None
-        assert s["toggles"] == {"display_push": False, "mqtt": False}
+        assert s["toggles"] == {"display_push": False, "mqtt": False, "relay_test": False}
 
 
 def test_api_version():

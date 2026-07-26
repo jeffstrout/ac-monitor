@@ -81,3 +81,12 @@ web:
 watchdog:
   enabled: false
   period_s: 120
+
+# Relay↔opto loopback self-test / relay-activity stress test. When enabled, the
+# app toggles relay_channel every interval_s and checks that opto_channel follows
+# (relay wired to that opto input). Off by default; toggle from the control panel.
+relay_selftest:
+  enabled: false
+  relay_channel: 5
+  opto_channel: 5
+  interval_s: 15

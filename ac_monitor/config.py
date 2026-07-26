@@ -139,6 +139,18 @@ class Watchdog:
 
 
 @dataclass
+class RelaySelftest:
+    """Relay↔opto loopback test / relay-activity stress test. When enabled the
+    poller toggles ``relay_channel`` every ``interval_s`` and confirms the wired
+    ``opto_channel`` follows (relay closed → opto reads closed). Off by default."""
+
+    enabled: bool = False
+    relay_channel: int = 5
+    opto_channel: int = 5
+    interval_s: float = 15.0
+
+
+@dataclass
 class Config:
     temperature_unit: str = "F"          # "C" or "F"
     poll: Poll = field(default_factory=Poll)
@@ -149,6 +161,7 @@ class Config:
     mqtt: Mqtt = field(default_factory=Mqtt)
     web: Web = field(default_factory=Web)
     watchdog: Watchdog = field(default_factory=Watchdog)
+    relay_selftest: RelaySelftest = field(default_factory=RelaySelftest)
 
 
 # --- loading -----------------------------------------------------------------
@@ -200,6 +213,7 @@ def from_dict(data: dict[str, Any]) -> Config:
     mqtt = data.get("mqtt") or {}
     web = data.get("web") or {}
     wd = data.get("watchdog") or {}
+    rst = data.get("relay_selftest") or {}
     sensors = data.get("sensors") or {}
 
     cfg = Config(
@@ -240,6 +254,12 @@ def from_dict(data: dict[str, Any]) -> Config:
         watchdog=Watchdog(
             enabled=bool(wd.get("enabled", False)),
             period_s=int(wd.get("period_s", Watchdog.period_s)),
+        ),
+        relay_selftest=RelaySelftest(
+            enabled=bool(rst.get("enabled", False)),
+            relay_channel=int(rst.get("relay_channel", RelaySelftest.relay_channel)),
+            opto_channel=int(rst.get("opto_channel", RelaySelftest.opto_channel)),
+            interval_s=float(rst.get("interval_s", RelaySelftest.interval_s)),
         ),
     )
     validate(cfg)
@@ -310,6 +330,13 @@ def validate(cfg: Config) -> None:
         raise ConfigError("mqtt.enabled is true but mqtt.host is empty")
     if cfg.watchdog.period_s <= 0:
         raise ConfigError("watchdog.period_s must be > 0")
+    rst = cfg.relay_selftest
+    if not (1 <= rst.relay_channel <= 8):
+        raise ConfigError("relay_selftest.relay_channel must be 1..8")
+    if not (1 <= rst.opto_channel <= NUM_OPTO_CHANNELS):
+        raise ConfigError(f"relay_selftest.opto_channel must be 1..{NUM_OPTO_CHANNELS}")
+    if rst.interval_s <= 0:
+        raise ConfigError("relay_selftest.interval_s must be > 0")
 
 
 # --- saving (for the control panel to persist edits) -------------------------
@@ -342,6 +369,7 @@ def to_dict(cfg: Config) -> dict[str, Any]:
         "mqtt": asdict(cfg.mqtt),
         "web": asdict(cfg.web),
         "watchdog": asdict(cfg.watchdog),
+        "relay_selftest": asdict(cfg.relay_selftest),
     }
 
 

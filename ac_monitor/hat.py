@@ -99,6 +99,12 @@ class IoplusBackend:
     def read_opto(self, stack: int, channel: int) -> int:
         return int(float(self._run(str(stack), "optrd", str(channel))))
 
+    def relay_write(self, stack: int, channel: int, on: bool) -> None:
+        self._run(str(stack), "relwr", str(channel), "1" if on else "0")
+
+    def relay_read(self, stack: int, channel: int) -> int:
+        return int(float(self._run(str(stack), "relrd", str(channel))))
+
     def set_watchdog_period(self, stack: int, seconds: int) -> None:
         self._run(str(stack), "wdtpwr", str(seconds))
 

@@ -9,35 +9,37 @@ from ac_monitor.state import AppState
 
 def _readings():
     r = Readings(unit="F")
-    r.temps = {"input_air": 72.5, "output_air": 55.3, "suction_line": 40.1, "liquid_line": 90.2}
+    r.temps = {"input_air": 72.4, "output_air": 55.3, "suction_line": 40.1, "liquid_line": 90.2}
     r.health = {k: True for k in r.temps}
     r.fan_running = True
     return r
 
 
 def test_format_lines_full():
-    r = _readings()
-    d = Derived(delta_t=17.2)
-    lines = display.format_lines(r, d, "F")
-    assert lines[0] == "AC MONITOR"
-    assert "RET +72.5F" in lines
-    assert "SUP +55.3F" in lines
-    assert "DT  +17.2F" in lines
-    assert "FAN RUN" in lines
-    assert len(lines) == 7
-    assert all(len(x) <= 24 for x in lines)
+    lines = display.format_lines(_readings(), Derived(delta_t=17.2), "F")
+    assert lines[0] == "HVAC MONITOR"
+    assert len(lines) == 7 and all(len(x) <= 24 for x in lines)
+    body = "\n".join(lines)
+    assert "F" not in body      # °F units removed
+    assert "." not in body      # decimals removed
+    ret_row = next(l for l in lines if l.startswith("RET"))
+    assert "RET +72" in ret_row and "SUC +40" in ret_row   # RET/SUC same (left/right) row
+    sup_row = next(l for l in lines if l.startswith("SUP"))
+    assert "SUP +55" in sup_row and "LIQ +90" in sup_row
+    assert "RUN" in lines[-1] and "DELTA T +17" in lines[-1]   # bottom: fan + Delta T spelled out
 
 
 def test_format_lines_missing_channel_shows_dashes():
     r = Readings(unit="F")
-    r.temps = {"input_air": 72.5}   # only one connected (bench)
+    r.temps = {"input_air": 72.4}   # only one connected (bench)
     r.health = {"input_air": True}
     r.fan_running = None
     lines = display.format_lines(r, Derived(delta_t=None), "F")
-    assert "RET +72.5F" in lines
-    assert "SUP --" in lines
-    assert "DT  --" in lines
-    assert "FAN --" in lines
+    ret_row = next(l for l in lines if l.startswith("RET"))
+    assert "RET +72" in ret_row and "SUC --" in ret_row
+    sup_row = next(l for l in lines if l.startswith("SUP"))
+    assert "SUP --" in sup_row and "LIQ --" in sup_row
+    assert "DELTA T --" in lines[-1]
 
 
 def test_format_lines_negative_temp_keeps_minus():
@@ -46,8 +48,8 @@ def test_format_lines_negative_temp_keeps_minus():
     r.health = {"suction_line": True}
     r.fan_running = True
     lines = display.format_lines(r, Derived(delta_t=-3.1), "F")
-    assert "SUC -5.3F" in lines      # negative keeps its minus
-    assert "DT  -3.1F" in lines
+    assert any("SUC -5" in l for l in lines)      # -5.3 -> -5, minus kept
+    assert "DELTA T -3" in lines[-1]
 
 
 class _Recorder:
