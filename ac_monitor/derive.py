@@ -19,6 +19,7 @@ FAULT_NAMES = ("sensor_fault", "no_airflow", "abnormal_delta_t")
 class Derived:
     delta_t: float | None = None          # display unit, input - output
     mode: str | None = None               # "cooling" | "heating" | None
+    system_status: str = "Idle"           # "Cooling" | "Heating" | "Fan" | "Idle"
     faults: dict[str, bool] = field(default_factory=lambda: {n: False for n in FAULT_NAMES})
 
     @property
@@ -40,15 +41,29 @@ def compute(readings: Readings, cfg: Config) -> Derived:
     # Mode is inferred from the sign of ΔT (supply colder than return = cooling).
     ic = readings.temps_c.get("input_air")
     oc = readings.temps_c.get("output_air")
-    if ic is not None and oc is not None and readings.fan_running:
+    th = cfg.thresholds.delta_t
+    delta_f = None
+    if ic is not None and oc is not None:
         delta_f = (ic - oc) * 9.0 / 5.0          # compare in °F against the _f thresholds
-        th = cfg.thresholds.delta_t
+
+    if delta_f is not None and readings.fan_running:
         if delta_f >= 0:
             d.mode = "cooling"
             faults["abnormal_delta_t"] = not (th.cooling_min_f <= delta_f <= th.cooling_max_f)
         else:
             d.mode = "heating"
             faults["abnormal_delta_t"] = not (th.heating_min_f <= -delta_f <= th.heating_max_f)
+
+    # System status: fan drives it; ΔT deadband separates active heat/cool from
+    # fan-only air movement. Fan off (or unknown) => Idle.
+    if not readings.fan_running:
+        d.system_status = "Idle"
+    elif delta_f is not None and delta_f > th.status_deadband_f:
+        d.system_status = "Cooling"
+    elif delta_f is not None and delta_f < -th.status_deadband_f:
+        d.system_status = "Heating"
+    else:
+        d.system_status = "Fan"
 
     d.faults = faults
     return d

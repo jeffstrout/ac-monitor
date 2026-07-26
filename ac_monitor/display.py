@@ -32,16 +32,15 @@ def _cols(left: str, right: str) -> str:
 def format_lines(readings: Readings | None, derived: Derived | None, unit: str) -> list[str]:
     dt = derived.delta_t if derived else None
     dt_txt = f"{dt:+.0f}" if dt is not None else "--"
-    fan = None if readings is None else readings.fan_running
-    fan_txt = "RUN" if fan else ("IDLE" if fan is not None else "--")
+    status = (derived.system_status if derived else None) or "IDLE"
     return [
         "HVAC MONITOR",
         "",
         _cols(f"RET {_t(readings, 'input_air')}", f"SUC {_t(readings, 'suction_line')}"),
         _cols(f"SUP {_t(readings, 'output_air')}", f"LIQ {_t(readings, 'liquid_line')}"),
         "",
-        "",
-        f"{fan_txt}   DELTA T {dt_txt}",
+        f"DELTA T {dt_txt}",             # line 6, centered by push(align=center)
+        f"SYSTEM {status.upper()}",      # line 7, centered
     ]
 
 
