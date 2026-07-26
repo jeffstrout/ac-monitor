@@ -24,10 +24,13 @@ def test_format_lines_full():
     assert "." not in body      # decimals removed
     ret_row = next(l for l in lines if "RET" in l)
     sup_row = next(l for l in lines if "SUP" in l)
-    # whole data block flush against the right edge (moved to the right columns)
-    assert len(ret_row) == 24 and ret_row.startswith(" ") and ret_row.endswith("+40")
-    assert len(sup_row) == 24 and sup_row.startswith(" ") and sup_row.endswith("+90")
-    assert "RET" in ret_row and "SUC" in ret_row     # both pairs on the same line
+    assert len(ret_row) == 24 and len(sup_row) == 24
+    # RET/SUP nudged right 2 cols; SUC/LIQ start mid-line
+    assert ret_row.index("RET") == 2 and sup_row.index("SUP") == 2
+    assert ret_row.index("SUC") == 12 and sup_row.index("LIQ") == 12
+    # 2-col gap between each label and its value
+    assert ret_row[5:7] == "  " and ret_row[15:17] == "  "
+    assert ret_row.index("+72") == 7 and ret_row.index("+40") == 17
     # the two rows' value columns line up vertically
     assert ret_row.index("+72") == sup_row.index("+55")
     assert ret_row.index("+40") == sup_row.index("+90")
@@ -43,8 +46,9 @@ def test_format_lines_missing_channel_shows_dashes():
     lines = display.format_lines(r, Derived(delta_t=None), "F")
     ret_row = next(l for l in lines if "RET" in l)
     sup_row = next(l for l in lines if "SUP" in l)
-    assert "RET" in ret_row and "+72" in ret_row and ret_row.endswith("--")   # SUC missing -> --
-    assert sup_row.endswith("--") and "LIQ" in sup_row
+    assert ret_row.index("RET") == 2 and ret_row[7:10] == "+72"
+    assert ret_row.rstrip().endswith("--")   # SUC missing -> --
+    assert sup_row.rstrip().endswith("--") and "LIQ" in sup_row
     assert lines[5] == "DELTA T --"
     assert lines[6] == "SYSTEM IDLE"        # default status when derived is idle
 
@@ -56,7 +60,7 @@ def test_format_lines_negative_temp_keeps_minus():
     r.fan_running = True
     lines = display.format_lines(r, Derived(delta_t=-3.1, system_status="Heating"), "F")
     ret_row = next(l for l in lines if "SUC" in l)
-    assert ret_row.endswith("-5")     # suction -5.3 -> -5, minus kept, flush right
+    assert ret_row.rstrip().endswith("-5")     # suction -5.3 -> -5, minus kept
     assert lines[5] == "DELTA T -3"
     assert lines[6] == "SYSTEM HEATING"
 
