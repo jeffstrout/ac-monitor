@@ -105,3 +105,46 @@ def test_i2c_all_down():
     r = hat.read_all(_cfg(), backend)
     assert r.i2c_ok is False
     assert r.delta_t is None
+
+
+# --- IoplusBackend._run write-vs-read output handling ------------------------
+
+class _FakeProc:
+    def __init__(self, stdout="", stderr="", returncode=0):
+        self.stdout, self.stderr, self.returncode = stdout, stderr, returncode
+
+
+def _patch_proc(monkeypatch, proc):
+    monkeypatch.setattr(hat.subprocess, "run", lambda *a, **k: proc)
+
+
+def test_relay_write_accepts_silent_success(monkeypatch):
+    # `ioplus relwr` prints nothing on success — must NOT be treated as failure.
+    _patch_proc(monkeypatch, _FakeProc(stdout="", returncode=0))
+    hat.IoplusBackend().relay_write(0, 5, True)   # should not raise
+
+
+def test_watchdog_writes_accept_silent_success(monkeypatch):
+    _patch_proc(monkeypatch, _FakeProc(stdout="", returncode=0))
+    b = hat.IoplusBackend()
+    b.set_watchdog_period(0, 120)                 # wdtpwr — silent
+    b.pet_watchdog(0)                             # wdtr — silent
+
+
+def test_read_still_requires_output(monkeypatch):
+    # A read that returns nothing IS an error (bus glitch / not populated).
+    _patch_proc(monkeypatch, _FakeProc(stdout="", returncode=0))
+    with pytest.raises(HatError):
+        hat.IoplusBackend().read_opto(0, 5)
+
+
+def test_not_detected_still_fails_even_for_writes(monkeypatch):
+    _patch_proc(monkeypatch, _FakeProc(stdout="IO-PLUS card not detected", returncode=0))
+    with pytest.raises(HatError):
+        hat.IoplusBackend().relay_write(0, 5, True)
+
+
+def test_nonzero_return_still_fails_for_writes(monkeypatch):
+    _patch_proc(monkeypatch, _FakeProc(stdout="", returncode=1))
+    with pytest.raises(HatError):
+        hat.IoplusBackend().relay_write(0, 5, True)
