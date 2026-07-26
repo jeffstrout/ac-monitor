@@ -76,7 +76,7 @@ class IoplusBackend:
         self.timeout_s = timeout_s
         self.binary = binary
 
-    def _run(self, *args: str) -> str:
+    def _run(self, *args: str, expect_output: bool = True) -> str:
         try:
             proc = subprocess.run(
                 [self.binary, *args],
@@ -89,7 +89,10 @@ class IoplusBackend:
         except subprocess.TimeoutExpired as e:
             raise HatError(f"{self.binary} {' '.join(args)} timed out (bus jammed?)") from e
         out = (proc.stdout + proc.stderr).strip()
-        if proc.returncode != 0 or "not detected" in out.lower() or not out:
+        # Write commands (relwr, wdtpwr, wdtr) succeed silently; only reads must
+        # produce output, so only treat "no output" as a failure when expected.
+        failed = proc.returncode != 0 or "not detected" in out.lower() or (expect_output and not out)
+        if failed:
             raise HatError(f"{self.binary} {' '.join(args)}: {out or 'no output'}")
         return out
 
@@ -100,17 +103,17 @@ class IoplusBackend:
         return int(float(self._run(str(stack), "optrd", str(channel))))
 
     def relay_write(self, stack: int, channel: int, on: bool) -> None:
-        self._run(str(stack), "relwr", str(channel), "1" if on else "0")
+        self._run(str(stack), "relwr", str(channel), "1" if on else "0", expect_output=False)
 
     def relay_read(self, stack: int, channel: int) -> int:
         return int(float(self._run(str(stack), "relrd", str(channel))))
 
     def set_watchdog_period(self, stack: int, seconds: int) -> None:
-        self._run(str(stack), "wdtpwr", str(seconds))
+        self._run(str(stack), "wdtpwr", str(seconds), expect_output=False)
 
     def pet_watchdog(self, stack: int) -> None:
         """Reload the HAT watchdog (arms it on the first call)."""
-        self._run(str(stack), "wdtr")
+        self._run(str(stack), "wdtr", expect_output=False)
 
 
 # --- aggregation -------------------------------------------------------------
