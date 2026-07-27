@@ -1,13 +1,16 @@
 # AC Monitor
 
-HVAC monitoring for a residential air handler, built on a **Raspberry Pi 3B+** and a
+HVAC monitoring for a residential air handler, built on a **Raspberry Pi 5** and a
 **Sequent Microsystems Home Automation HAT**. The system reads duct/refrigerant-line
 temperatures and an airflow sail switch, then serves a live web dashboard and publishes
 everything to **Home Assistant** over MQTT.
 
-> **Status:** 📐 Design phase. This repository currently contains the hardware design,
-> wiring plan, software architecture, and MQTT/Home Assistant integration spec. No
-> application code has been written yet — see the [roadmap](docs/roadmap.md).
+> **Status:** ✅ Running. The poller, web control panel, calibration editor, MQTT/Home
+> Assistant integration, and split-flap display push are all implemented, with a
+> 93-test suite. Deployed to the Pi via GHCR + Watchtower — see
+> [docs/auto-update.md](docs/auto-update.md). Remaining work is tracked in
+> [issues](https://github.com/jeffstrout/ac-monitor/issues); the longer-range
+> roadmap is in [docs/roadmap.md](docs/roadmap.md).
 
 ---
 

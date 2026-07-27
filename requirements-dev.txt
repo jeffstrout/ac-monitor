@@ -1,0 +1,8 @@
+# Test-only dependencies. Kept separate so they don't bloat the runtime image.
+-r requirements.txt
+
+pytest
+# starlette's TestClient (used by tests/test_web.py and tests/test_control.py)
+# needs an HTTP client at import time. Without it the whole suite fails to
+# collect, which is how the suite could sit unrun for months.
+httpx
