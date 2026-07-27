@@ -65,6 +65,34 @@ def test_healthz_degraded_when_bus_down():
         assert c.get("/api/state").json()["i2c_ok"] is False
 
 
+def test_api_health_matches_the_appliance_contract():
+    """/api/health is the standard spelling (homelab-standards)."""
+    with _client() as c:
+        r = c.get("/api/health")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "ok"
+        # The contract requires these alongside status.
+        assert "version" in body
+        assert isinstance(body["uptime_seconds"], int)
+
+
+def test_api_health_reports_degraded_when_bus_down():
+    """Alive but not doing its job — liveness alone would call this healthy."""
+    with _client(adc={}, opto={}) as c:
+        r = c.get("/api/health")
+        assert r.status_code == 503
+        assert r.json()["status"] == "degraded"
+
+
+def test_healthz_alias_matches_api_health():
+    """The deprecated alias must not drift from the endpoint it aliases."""
+    with _client() as c:
+        old, new = c.get("/healthz").json(), c.get("/api/health").json()
+        assert old["status"] == new["status"]
+        assert old.keys() == new.keys()
+
+
 def test_dashboard_served():
     with _client() as c:
         r = c.get("/")

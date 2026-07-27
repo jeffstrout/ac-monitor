@@ -5,11 +5,10 @@ name: Publish Docker image
 # On every push to main (i.e. after a PR merges), build a multi-arch image and
 # push it to GHCR as ghcr.io/<owner>/ac-monitor:latest. A Raspberry Pi running
 # deploy/docker-compose.yml pulls that image and auto-updates via Watchtower —
-# it never builds from source (the Pi 3B+ is too small to build under QEMU).
+# it never builds from source (a small Pi cannot build under QEMU).
 #
-# NOTE: the build is GUARDED — it is skipped until the `ac_monitor/` Python
-# package exists (Phase 2). Until then this workflow stays green without
-# producing an image, so the deploy scaffolding can live in the repo now.
+# Canonical form: jeffstrout/homelab-standards/workflows/docker-publish.yml.
+# The only permitted variation here is `file: deploy/Dockerfile`.
 on:
   push:
     branches: [main]
@@ -21,25 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Only build once there is application code to build.
-  guard:
-    runs-on: ubuntu-latest
-    outputs:
-      has_app: ${{ steps.check.outputs.has_app }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: check
-        run: |
-          if [ -f ac_monitor/__main__.py ]; then
-            echo "has_app=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_app=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::ac_monitor/ package not present yet — skipping image build (Phase 2)."
-          fi
-
   build-and-push:
-    needs: guard
-    if: needs.guard.outputs.has_app == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

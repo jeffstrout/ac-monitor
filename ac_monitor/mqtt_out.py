@@ -31,7 +31,7 @@ def _device() -> dict:
         "identifiers": ["ac_monitor_pi"],
         "name": "AC Monitor",
         "manufacturer": "DIY",
-        "model": "RPi 3B+ + Sequent Home Automation HAT",
+        "model": "RPi 5 + Sequent Home Automation HAT",
     }
 
 

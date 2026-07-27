@@ -5,7 +5,8 @@ Routes:
   GET  /api/state            latest readings + derived + toggles
   GET  /api/version          build provenance
   GET  /api/calibration      per-channel gain/offset + capture points
-  GET  /healthz              200 if the bus is up, else 503
+  GET  /api/health           200 if the bus is up, else 503 (contract endpoint)
+  GET  /healthz              deprecated alias for /api/health
   POST /api/toggle/display   flip display-push on/off
   POST /api/toggle/mqtt      flip MQTT output on/off
   POST /api/mqtt/config      set broker host/port/user/pass
@@ -19,6 +20,7 @@ The poller runs as a background task started in the app lifespan.
 from __future__ import annotations
 
 import asyncio
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -32,6 +34,9 @@ from ..poller import poll_loop, poll_once
 from ..state import AppState
 from ..version import get_version
 from .page import DASHBOARD
+
+
+_STARTED_AT = time.time()
 
 
 class CaptureReq(BaseModel):
@@ -111,10 +116,29 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
     def api_calibration() -> dict:
         return _calibration_view(state)
 
-    @app.get("/healthz")
-    def healthz() -> JSONResponse:
+    @app.get("/api/health")
+    def health() -> JSONResponse:
+        """Health per the homelab appliance contract.
+
+        `degraded` matters: the app can be serving traffic while the I2C bus is
+        down, which means it is alive but not doing its job. Liveness alone would
+        report that as healthy.
+        """
         ok = state.readings is not None and state.readings.i2c_ok
-        return JSONResponse({"status": "ok" if ok else "degraded"}, status_code=200 if ok else 503)
+        return JSONResponse(
+            {
+                "status": "ok" if ok else "degraded",
+                "version": get_version().get("commit", "dev"),
+                "uptime_seconds": round(time.time() - _STARTED_AT),
+                "i2c_ok": bool(state.readings and state.readings.i2c_ok),
+            },
+            status_code=200 if ok else 503,
+        )
+
+    @app.get("/healthz", include_in_schema=False)
+    def healthz() -> JSONResponse:
+        """Deprecated alias for /api/health — kept so existing probes don't break."""
+        return health()
 
     @app.post("/api/toggle/display")
     def toggle_display() -> dict:

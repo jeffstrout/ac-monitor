@@ -16,6 +16,20 @@ class MockBackend:
         return 1
 
 
+class DeadChannelBackend(MockBackend):
+    """AD3 (suction_line) always fails, so that channel never has a reading.
+
+    `read_all` catches the error and marks the channel `None`, which is the real
+    "no current reading" state — rather than poking `state.readings` after the
+    app has started, which races the background poller.
+    """
+
+    def read_adc(self, stack, channel):
+        if channel == 3:
+            raise HatError("simulated dead channel")
+        return super().read_adc(stack, channel)
+
+
 def _state(tmp_path):
     cfg = cfgmod.from_dict(
         {"units": {"temperature": "F"}, "poll": {"interval_s": 60}, "display": {"enabled": False}}
@@ -80,8 +94,15 @@ def test_calibration_view(tmp_path):
 
 
 def test_capture_missing_reading_409(tmp_path):
+    """Capturing a calibration point needs a live reading.
+
+    Previously this set `state.readings.volts["suction_line"] = None` inside the
+    TestClient context — but the lifespan has already started the poller by then,
+    which overwrites `readings` on its next tick. Whether the assertion held came
+    down to which won the race; it passed locally and failed in CI. Using a
+    backend whose channel genuinely fails removes the race.
+    """
     state = _state(tmp_path)
-    with TestClient(create_app(state, MockBackend())) as c:
-        state.readings.volts["suction_line"] = None
+    with TestClient(create_app(state, DeadChannelBackend())) as c:
         r = c.post("/api/calibrate/capture", json={"role": "suction_line", "known_c": 0.0})
         assert r.status_code == 409
