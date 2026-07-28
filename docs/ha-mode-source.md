@@ -4,6 +4,9 @@
 **Entity:** `climate.home` on Home Assistant at `192.168.0.105:8123`.
 **Confirmed 2026-07-28:** the entity reports `hvac_action`. Design is valid; see
 *Confirmed payload* below for what the real response changed.
+**Scope change 2026-07-28:** the **sail switch is being removed** pending a
+replacement sensor. See *Running without airflow proof* — it has real
+consequences for the fallback.
 
 Today `system_status` is *inferred* from the sail switch plus the sign of air-side
 ΔT. This replaces the inference with the thermostat's own reported action, read
@@ -33,26 +36,49 @@ better label, but a class of fault becoming detectable at all.
 
 ---
 
-## Three signals, not one
+## Signals
 
-Keep all three. They answer different questions, and the disagreements are where
-the diagnostic value is.
+| Signal | Source | Question | Status |
+|---|---|---|---|
+| **Demand** | HA `climate.home` → `hvac_action` | what is it being *told* to do? | ✅ |
+| **Achieved** | thermistors → ΔT | is it *working*? | ✅ |
+| **Actual** | sail switch on OPTO-5 | is air *actually* moving? | ⛔ **removed, pending a replacement sensor** |
 
-| Signal | Source | Question |
-|---|---|---|
-| **Demand** | HA `climate.home` → `hvac_action` | what is it being *told* to do? |
-| **Actual** | sail switch on OPTO-5 | is air *actually* moving? |
-| **Achieved** | thermistors → ΔT | is it *working*? |
+## Running without airflow proof
 
-**The sail switch must stay.** Its documented job is airflow proof — "confirms
-air is actually moving in the duct." HA cannot tell you that; it reports what the
-thermostat asked for, not what the blower did. Demand-without-airflow is the
-highest-value fault in the appliance:
+The sail switch is being removed for now. This is a deliberate, temporary
+trade — recorded here so the cost is visible rather than discovered later.
 
-> Thermostat calls for cooling, sail switch open → **blower failed, belt broken,
-> or filter blocked.**
+**What is lost.** Airflow proof answers a question neither of the other two
+signals can: *did the blower actually run?* Demand-without-airflow —
 
-Delete the switch and that becomes undetectable.
+> thermostat calls for cooling, no air moving → **blower failed, belt broken,
+> or filter blocked**
+
+— was the highest-value fault available to this appliance, and it is not
+detectable without it. `no_airflow` and `airflow_mismatch` are both off the table
+until a sensor is back.
+
+**What it does to the fallback.** This is the part that matters most. The
+original design degraded to ΔT inference when HA was unreachable, and that
+inference used `fan_running` to know whether air was moving. Without it, ΔT ≈ 0
+is ambiguous:
+
+- system off → ΔT ≈ 0
+- blower running with no heat/cool call → ΔT ≈ 0
+
+Identical readings, different states. So **HA stops being an authoritative source
+with a backstop and becomes the only source of system state.** Acceptable for a
+home HVAC monitor; it should still be a decision rather than a surprise.
+
+**Consequence:** when HA is unavailable, do **not** guess. Suppress the ΔT-band
+faults, report `system_status: "Unknown"`, raise `ha_unavailable`, and say so on
+the panel. A confident wrong answer is worse than an honest gap.
+
+**Design for its return.** Gate the airflow logic behind `airflow.enabled: false`
+rather than deleting it, and keep its tests running. When the replacement sensor
+arrives this becomes a config flag plus wiring, not a rewrite. OPTO-5 stays
+documented in `docs/hardware.md` as unwired-but-reserved.
 
 ---
 
@@ -137,15 +163,15 @@ its band from **demand** rather than from the sign of ΔT.
 | Fault | Condition | Note |
 |---|---|---|
 | `sensor_fault` | any channel unreadable | unchanged |
-| `no_airflow` | sail switch open past debounce | unchanged — still the sail switch |
-| `abnormal_delta_t` | ΔT outside the band **for the demanded mode** | no longer circular |
-| **`airflow_mismatch`** | **airflow demanded** and sail switch open | **the blower-failure fault** |
+| `no_airflow` | ~~sail switch open past debounce~~ | ⛔ **disabled** — no airflow sensor |
+| `abnormal_delta_t` | ΔT outside the band **for the demanded mode** | no longer circular; **gated on demand**, since `fan_running` is gone |
+| **`airflow_mismatch`** | ~~airflow demanded and sail switch open~~ | ⛔ **deferred** — needs an airflow sensor |
 | **`wrong_direction`** | demand cooling but ΔT heating, or vice versa | only detectable with authoritative demand |
 | **`ha_unavailable`** | HA enabled but unreachable or stale | degraded, not broken |
 
-**"Airflow demanded" is not the same as "heating or cooling."** With
-`fan_modes: ["on", "auto"]` the blower can be forced to run with no call for
-heat or cool, so the condition is:
+**When the airflow sensor returns**, "airflow demanded" is not the same as
+"heating or cooling." With `fan_modes: ["on", "auto"]` the blower can be forced
+to run with no call for heat or cool, so the condition is:
 
 ```python
 airflow_demanded = hvac_action in ("heating", "cooling", "fan") or fan_mode == "on"
@@ -153,7 +179,12 @@ airflow_demanded = hvac_action in ("heating", "cooling", "fan") or fan_mode == "
 
 Using only `hvac_action` would miss a failed blower whenever the fan is set to
 run continuously — a silent gap in exactly the mode people leave thermostats in
-for air circulation.
+for air circulation. Recorded now so it isn't rediscovered later.
+
+**`abnormal_delta_t` needs a new gate.** It is currently gated on `fan_running`;
+with that gone, gate it on `hvac_action in ("heating", "cooling")` — arguably
+better anyway, since ΔT is only meaningful during an actual call. When HA is
+unavailable there is no gate, so the check is suppressed entirely.
 
 `wrong_direction` needs a deadband and a settle delay — a heat pump takes time to
 reverse, so the check must not fire during a legitimate changeover. Suggest
@@ -169,8 +200,10 @@ watching when things go wrong.
 
 **Rules:**
 
-- HA unreachable, timed out, or stale beyond `stale_after_s` → **fall back to
-  today's ΔT inference** and raise `ha_unavailable`.
+- HA unreachable, timed out, or stale beyond `stale_after_s` → **report
+  `system_status: "Unknown"`, suppress the ΔT-band faults, and raise
+  `ha_unavailable`.** With the sail switch gone there is no longer enough local
+  signal to infer state honestly, so do not guess.
 - Never block the poll loop. The HAT read is the critical path; the HA fetch gets
   a short timeout and its own failure path, exactly as `display.push` does.
 - Surface the source on the panel and in `/api/state` — an operator must be able
@@ -225,6 +258,11 @@ homeassistant:
   timeout_s: 3                            # must not stall the poll loop
   stale_after_s: 60                       # vs last_reported, NOT last_changed
   changeover_settle_s: 180                # suppress wrong_direction after a change
+
+airflow:
+  enabled: false                          # no sensor fitted; OPTO-5 unwired.
+                                          # Flip to true when one is back — the
+                                          # logic and its tests are retained.
 ```
 
 **`token` is a secret.** It must be redacted by `GET /api/config` (#43) and must
