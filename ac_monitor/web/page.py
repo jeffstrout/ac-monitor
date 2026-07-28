@@ -109,6 +109,7 @@ DASHBOARD = """<!doctype html>
  <span class="muted">air-side ΔT <span id="mode"></span></span>
  <span class="pill sys" id="sysStatus">–</span>
  <span class="pill health-ok" id="healthPill">–</span>
+ <span class="muted" id="modeSrc"></span>
 </div>
 <div class="scroll"><table id="temps"></table></div>
 <p class="status">Fan: <b id="fan">–</b> <span>Bus: <b id="bus">–</b></span></p>
@@ -165,6 +166,11 @@ async function refresh(){
  dt.textContent = dtCell;
  mode.textContent = s.mode?('('+s.mode+')'):'';
  sysStatus.textContent = s.system_status||'–';
+ // An operator must be able to tell a reported fact from an inferred guess.
+ const SRC={home_assistant:'reported by thermostat',inferred:'inferred from ΔT',
+            unavailable:'thermostat unreachable'};
+ modeSrc.textContent = SRC[s.mode_source]||'';
+ sysStatus.className = 'pill '+(s.mode_source==='unavailable'?'off':'sys');
  // Health is the bus plus any active fault — NOT system_status, which is only
  // the operating mode (Cooling/Heating/Fan/Idle) and is never itself a problem.
  const activeFaults=Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);

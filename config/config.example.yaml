@@ -90,3 +90,25 @@ relay_selftest:
   relay_channel: 5
   opto_channel: 5
   interval_s: 15
+
+# Authoritative system mode from Home Assistant's climate entity.
+# See docs/ha-mode-source.md. Disabled unless configured.
+#
+# We read attributes.hvac_action (what the system is DOING), never `state`
+# (hvac_mode — what it is SET to). Observed 2026-07-28: state "cool" with
+# hvac_action "idle" on a satisfied house; using `state` would report "Cooling"
+# while nothing was running.
+homeassistant:
+  enabled: false
+  base_url: "http://192.168.0.105:8123"
+  token: ""                  # long-lived access token — SECRET, never logged
+  entity_id: "climate.home"
+  timeout_s: 3               # must not stall the poll loop
+  stale_after_s: 60          # since our last SUCCESSFUL fetch
+  changeover_settle_s: 180   # heat pumps take time to reverse
+
+# Sail-switch airflow proof. Disabled 2026-07-28: the switch was removed pending
+# a replacement sensor. The logic and its tests are retained, so restoring it is
+# this flag plus wiring. OPTO-5 is unwired but reserved.
+airflow:
+  enabled: false
