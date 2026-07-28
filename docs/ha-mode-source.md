@@ -131,6 +131,36 @@ source — `heat_cool` says nothing about what is happening now.
 forced on independently of any heat/cool call. See the corrected
 `airflow_mismatch` condition.
 
+### Observed counterexample (2026-07-28, `cool` mode)
+
+After switching the thermostat from `heat_cool` to `cool`:
+
+```jsonc
+{
+  "state": "cool",                  // the MODE
+  "attributes": {
+    "hvac_action": "idle",          // what it is actually DOING
+    "current_temperature": 70,
+    "temperature": 72,              // single setpoint now...
+    "target_temp_high": null,       // ...and the pair went null
+    "target_temp_low": null
+  }
+}
+```
+
+**This is the argument for `hvac_action` over `state`, observed rather than
+asserted.** The house is 2 °F below setpoint, so nothing is running — yet the
+mode is `cool`. Sourcing from `state` would have ac-monitor reporting "Cooling"
+while the system sits idle and satisfied, and every ΔT-band fault would then be
+evaluated against a call that isn't happening.
+
+It also confirms `hvac_action` is a live field: `cooling` and `idle` have both
+now been seen on this entity.
+
+Note the setpoint shape changes with mode — `temperature` is populated in `cool`
+and null in `heat_cool`, with `target_temp_high`/`_low` doing the reverse.
+Anything reading setpoints later must handle both.
+
 **Staleness must key off `last_reported`, not `last_changed`.** In the sample
 they are 29 minutes apart on a perfectly healthy entity — `last_changed` only
 moves when the state itself changes, and a thermostat can legitimately sit in one
