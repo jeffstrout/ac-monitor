@@ -69,6 +69,14 @@ DASHBOARD = """<!doctype html>
  <h1 class="hl-header-name">AC Monitor</h1>
  <span class="hl-pill hl-pill--ok" id="healthPill">–</span>
  <span class="hl-header-spacer"></span>
+ <nav class="hl-header-nav">
+  <!-- /api/health, not the deprecated /healthz alias — the nav should teach the
+       contract spelling. Opened in a new tab so a JSON detour doesn't cost you
+       the panel you were reading. -->
+  <a class="hl-header-link" href="/api/health" target="_blank" rel="noopener">Health</a>
+  <a class="hl-header-link" href="/docs" target="_blank" rel="noopener">API&nbsp;docs</a>
+  <a class="hl-header-link" href="/api/state" target="_blank" rel="noopener">State&nbsp;JSON</a>
+ </nav>
  <span class="hl-header-meta" id="build"></span>
 </header>
 

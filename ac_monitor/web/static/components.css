@@ -71,13 +71,27 @@ td.hl-num {
 }
 
 /* ── shell header ──────────────────────────────────────────────────────────
-   Appliance name left, running commit right. This is the single component that
-   makes composed UIs feel like one application, so it is the one to adopt
-   first: same bar, same height, same position on every appliance.            */
+   The one component that makes composed UIs feel like one application. Row one
+   is identical on every appliance, in this order:
+
+     [name] [status pill] ······ [Health] [API docs] [app links…] [commit]
+
+   Health and API docs are REQUIRED everywhere. They are the two things you
+   reach for when an appliance misbehaves, and having to remember which
+   appliance exposes them is the whole problem this contract solves.
+
+   An app-specific second row (a primary action, live counters) is fine. Row one
+   is not negotiable.
+
+   Sticky, because losing the status pill while you scroll a fault list is
+   exactly wrong for a monitoring surface.                                     */
 .hl-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: var(--hl-space-3);
+  gap: var(--hl-space-2) var(--hl-space-3);
   flex-wrap: wrap;
   padding: var(--hl-space-3) var(--hl-space-4);
   background: var(--hl-surface);
@@ -91,10 +105,39 @@ td.hl-num {
 }
 /* Pushes everything after it to the right edge. */
 .hl-header-spacer { margin-left: auto; }
+
+/* Nav sits between the spacer and the commit. Accent-coloured because a link
+   IS an action — this is the one place in a header where blue is correct. */
+.hl-header-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hl-space-3);
+}
+.hl-header-link {
+  color: var(--hl-accent);
+  text-decoration: none;
+  font-size: var(--hl-text-sm);
+  font-weight: var(--hl-weight-medium);
+  white-space: nowrap;
+}
+.hl-header-link:hover { text-decoration: underline; }
+
 .hl-header-meta {
   font-family: var(--hl-font-mono);
   font-size: var(--hl-text-xs);
   color: var(--hl-fg-muted);
+  white-space: nowrap;
+}
+
+/* Narrow screens: the spacer stops pushing, so the nav wraps onto its own line
+   underneath the name instead of shoving the commit off the edge. Without this
+   the running build — the thing you check when a rollout looks wrong — is the
+   first casualty on a phone. */
+@media (max-width: 560px) {
+  .hl-header { gap: var(--hl-space-2); }
+  .hl-header-spacer { margin-left: 0; flex-basis: 100%; height: 0; }
+  .hl-header-nav { gap: var(--hl-space-3); }
 }
 
 /* ── card ──────────────────────────────────────────────────────────────────
