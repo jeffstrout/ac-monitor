@@ -6,11 +6,14 @@ dashboard, /api/state, and (later) MQTT publish.
 
 from __future__ import annotations
 
+import time
+
 from dataclasses import asdict, dataclass, field
 
 from .config import Config
 from .debounce import Debouncer
 from .derive import Derived
+from .ha import HaSource
 from .hat import Readings
 
 
@@ -26,6 +29,7 @@ class AppState:
     fan_debouncer: Debouncer | None = None
     last_display_push: float | None = None
     relay_selftest: dict | None = None       # latest relay↔opto loopback result
+    ha: HaSource = field(default_factory=HaSource)
     # role -> list of (known_c, raw_c) calibration capture points.
     captures: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
 
@@ -58,6 +62,17 @@ class AppState:
             "delta_t": (d.delta_t if d else None),
             "mode": (d.mode if d else None),
             "system_status": (d.system_status if d else "Idle"),
+            # Where the mode came from, so the panel can distinguish a fact from
+            # a guess. Never include the HA token here.
+            "mode_source": (d.mode_source if d else "inferred"),
+            "ha": {
+                "enabled": self.config.homeassistant.enabled,
+                "entity_id": self.config.homeassistant.entity_id,
+                "action": self.ha.reading.action,
+                "fan_mode": self.ha.reading.fan_mode,
+                "available": self.ha.available(self.config, time.time()),
+                "error": self.ha.error,
+            },
             "faults": (d.faults if d else {}),
             "health": r.health if r else {},
             "i2c_ok": r.i2c_ok if r else False,

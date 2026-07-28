@@ -118,6 +118,36 @@ class Mqtt:
 
 
 @dataclass
+class HomeAssistant:
+    """Authoritative system mode from HA's climate entity (docs/ha-mode-source.md).
+
+    Disabled unless configured, like Mqtt. ``token`` is a long-lived access
+    token: a SECRET. It must never reach /api/state, the dashboard, the logs or
+    MQTT.
+    """
+
+    enabled: bool = False
+    base_url: str = "http://192.168.0.105:8123"
+    token: str = ""
+    entity_id: str = "climate.home"
+    timeout_s: float = 3.0          # must not stall the poll loop
+    stale_after_s: float = 60.0     # since our last SUCCESSFUL fetch
+    changeover_settle_s: float = 180.0   # heat pumps take time to reverse
+
+
+@dataclass
+class Airflow:
+    """Sail-switch airflow proof.
+
+    Disabled 2026-07-28: the switch was removed pending a replacement sensor.
+    The logic and its tests are retained so bringing it back is a config flag
+    plus wiring, not a rewrite. OPTO-5 is unwired but reserved.
+    """
+
+    enabled: bool = False
+
+
+@dataclass
 class Poll:
     interval_s: float = 5.0
     fan_debounce_s: float = 5.0   # OPTO-5 sail-switch debounce (ignore vane flutter)
@@ -160,6 +190,8 @@ class Config:
     thresholds: Thresholds = field(default_factory=Thresholds)
     display: Display = field(default_factory=Display)
     mqtt: Mqtt = field(default_factory=Mqtt)
+    homeassistant: HomeAssistant = field(default_factory=HomeAssistant)
+    airflow: Airflow = field(default_factory=Airflow)
     web: Web = field(default_factory=Web)
     watchdog: Watchdog = field(default_factory=Watchdog)
     relay_selftest: RelaySelftest = field(default_factory=RelaySelftest)
@@ -212,6 +244,8 @@ def from_dict(data: dict[str, Any]) -> Config:
     thresh = (data.get("thresholds") or {}).get("delta_t") or {}
     disp = data.get("display") or {}
     mqtt = data.get("mqtt") or {}
+    hass = data.get("homeassistant") or {}
+    airflow = data.get("airflow") or {}
     web = data.get("web") or {}
     wd = data.get("watchdog") or {}
     rst = data.get("relay_selftest") or {}
@@ -252,6 +286,18 @@ def from_dict(data: dict[str, Any]) -> Config:
             discovery_prefix=str(mqtt.get("discovery_prefix", "homeassistant")),
             retain=bool(mqtt.get("retain", True)),
         ),
+        homeassistant=HomeAssistant(
+            enabled=bool(hass.get("enabled", HomeAssistant.enabled)),
+            base_url=str(hass.get("base_url", HomeAssistant.base_url)),
+            token=str(hass.get("token", "")),
+            entity_id=str(hass.get("entity_id", HomeAssistant.entity_id)),
+            timeout_s=float(hass.get("timeout_s", HomeAssistant.timeout_s)),
+            stale_after_s=float(hass.get("stale_after_s", HomeAssistant.stale_after_s)),
+            changeover_settle_s=float(
+                hass.get("changeover_settle_s", HomeAssistant.changeover_settle_s)
+            ),
+        ),
+        airflow=Airflow(enabled=bool(airflow.get("enabled", Airflow.enabled))),
         web=Web(host=str(web.get("host", "0.0.0.0")), port=int(web.get("port", 8000))),
         watchdog=Watchdog(
             enabled=bool(wd.get("enabled", False)),
@@ -369,6 +415,10 @@ def to_dict(cfg: Config) -> dict[str, Any]:
         "thresholds": {"delta_t": asdict(cfg.thresholds.delta_t)},
         "display": asdict(cfg.display),
         "mqtt": asdict(cfg.mqtt),
+        # The HA token IS written here — /data/config.yaml is where secrets live.
+        # Redaction belongs to the API layer, not to persistence.
+        "homeassistant": asdict(cfg.homeassistant),
+        "airflow": asdict(cfg.airflow),
         "web": asdict(cfg.web),
         "watchdog": asdict(cfg.watchdog),
         "relay_selftest": asdict(cfg.relay_selftest),

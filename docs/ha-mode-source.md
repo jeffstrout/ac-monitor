@@ -248,14 +248,19 @@ should not become a habit.
 
 ## Don't echo HA's own data back to it
 
-ac-monitor publishes `system_status` to HA over MQTT. Once that value *comes
-from* HA, republishing it creates a round trip: HA's own thermostat state,
-laundered through a sensor, reappearing as a second entity that can disagree with
-the first during a fetch failure.
+**Resolved during implementation: this was a non-problem.** `mqtt_out` publishes
+temperatures, ΔT, airflow and faults — it never published `system_status`. There
+is nothing to suppress, and no round trip to break.
 
-**Rule:** when `mode_source == home_assistant`, suppress the `system_status`
-discovery/state publish. Keep publishing ΔT, temperatures, airflow and faults —
-those are genuinely ours.
+The rule still holds as a principle for anything added later: **do not create an
+HA entity for a value HA already owns.** Faults remain genuinely ours, including
+the two new ones, because they are conclusions drawn from combining HA's demand
+with our own measurements — that combination is what this appliance contributes.
+
+One real consequence of removing the sail switch: the `airflow` binary sensor
+stops publishing, because `fan_running` is None. The discovery entity remains and
+simply goes stale in HA. Acceptable while the sensor is out; delete the entity if
+it becomes confusing.
 
 ---
 

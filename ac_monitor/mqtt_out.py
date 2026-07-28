@@ -23,6 +23,8 @@ FAULT_LABELS = {
     "sensor_fault": "Sensor Fault",
     "no_airflow": "No-Airflow Fault",
     "abnormal_delta_t": "Abnormal ΔT",
+    "wrong_direction": "Wrong Direction",
+    "ha_unavailable": "Home Assistant Unavailable",
 }
 
 

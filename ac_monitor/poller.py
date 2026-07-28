@@ -25,7 +25,16 @@ def poll_once(state: AppState, backend: HatBackend) -> None:
     # Debounce the sail switch: the derived state, dashboard, MQTT, and the
     # no_airflow fault all use the debounced value, not the raw flutter.
     readings.fan_running = state.fan_debouncer.update(readings.fan_running, now)
-    derived = derive.compute(readings, state.config)
+    # Authoritative demand from the thermostat, when we can vouch for it. The
+    # fetch has its own short timeout and returns None on any failure, so a
+    # slow or absent Home Assistant costs one timeout, never the poll.
+    state.ha.poll(state.config, now)
+    derived = derive.compute(
+        readings,
+        state.config,
+        demand=state.ha.demand(state.config, now),
+        demand_settled=state.ha.settled(state.config, now),
+    )
     state.update(readings, derived, now)
 
 
