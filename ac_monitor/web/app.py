@@ -20,11 +20,13 @@ The poller runs as a background task started in the app lifespan.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .. import calibrate
@@ -97,6 +99,14 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
     def _require_role(role: str) -> None:
         if role not in state.config.thermistors.channels:
             raise HTTPException(status_code=400, detail=f"unknown channel role: {role}")
+
+    # Shared design tokens (homelab-standards), vendored into the image rather
+    # than fetched — the LAN guarantees nothing, including itself.
+    app.mount(
+        "/static",
+        StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")),
+        name="static",
+    )
 
     @app.get("/", response_class=HTMLResponse)
     def dashboard() -> str:
