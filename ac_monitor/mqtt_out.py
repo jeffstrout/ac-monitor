@@ -106,7 +106,12 @@ def state_messages(snapshot: dict, cfg: Config) -> list[tuple[str, str, bool]]:
 def _default_client():  # pragma: no cover - needs a broker
     import paho.mqtt.client as mqtt
 
-    return mqtt.Client()
+    # requirements.txt is unpinned, so a rebuilt image can land on paho 1.x or
+    # 2.x. A bare Client() works on both, but on 2.x it warns and silently picks
+    # the v1 callback API — state the choice instead of inheriting a deprecated
+    # default. _on_connect ignores its arguments, so either API version is fine.
+    api = getattr(mqtt, "CallbackAPIVersion", None)
+    return mqtt.Client(api.VERSION1) if api is not None else mqtt.Client()
 
 
 class MqttPublisher:
@@ -139,20 +144,45 @@ class MqttPublisher:
         for t, p, r in state_messages(state.snapshot(), state.config):
             self.client.publish(t, p, retain=r)
 
+    def _announce(self, client) -> None:
+        """Publish retained ``online`` and force discovery to be re-sent.
+
+        Runs on every successful (re)connect, not just the first. paho reconnects
+        on its own under ``loop_start()`` without telling us — and by then the
+        broker has already published our retained LWT ``offline`` on our behalf.
+        Without this, a broker restart (every Home Assistant update is one) leaves
+        HA showing every entity unavailable while fresh readings keep arriving:
+        a stuck false ``offline``, which for a fleet that uses the LWT as its
+        dead-device detection is as damaging as a missed real one.
+
+        Re-sending discovery covers the other half — a broker that came back
+        without its retained store has forgotten the entity configs.
+        """
+        if self._status_topic:
+            client.publish(self._status_topic, "online", retain=True)
+        self._discovered = False
+
+    def _on_connect(self, client, *_args) -> None:
+        # Signature varies across paho callback API versions; only `client` is used.
+        self._announce(client)
+
     def _connect(self, cfg: Config) -> None:
         m = cfg.mqtt
         c = self._factory()
         status = f"{m.base_topic}/status"
+        self._status_topic = status
         c.will_set(status, "offline", retain=True)
         if m.username:
             c.username_pw_set(m.username, m.password)
+        c.on_connect = self._on_connect
         c.connect(m.host, m.port)
         c.loop_start()
-        c.publish(status, "online", retain=True)
         self.client = c
         self.connected = True
-        self._discovered = False
-        self._status_topic = status
+        # Announce directly as well: the callback is the reconnect path, but a
+        # first connect must not depend on it firing. Re-publishing a retained
+        # value is idempotent, so the overlap costs nothing.
+        self._announce(c)
 
     def close(self) -> None:
         """Publish offline and tear down the client (toggle off / shutdown)."""

@@ -55,6 +55,16 @@ class FakeClient:
         self.userpw = None
         self.host = None
         self.loop = False
+        self.on_connect = None
+
+    def simulate_reconnect(self):
+        """Fire the on_connect callback the way paho does after it reconnects.
+
+        paho re-establishes the session on its own under ``loop_start()``; the
+        publisher only learns about it through this callback.
+        """
+        assert self.on_connect is not None, "publisher never registered on_connect"
+        self.on_connect(self, None, {}, 0)
 
     def will_set(self, t, p, retain=False):
         self.will = (t, p, retain)
@@ -127,3 +137,33 @@ def test_discovery_published_once():
     pub.sync(st)
     n2 = sum(1 for t, _, _ in fake.published if t.endswith("/config"))
     assert n1 > 0 and n2 == n1                                          # not re-published
+
+
+def test_reconnect_republishes_online():
+    """A broker restart must not leave the appliance stuck 'offline' in HA.
+
+    The broker publishes our retained LWT 'offline' when the connection drops;
+    paho then reconnects silently. Without re-announcing, readings keep flowing
+    to a device Home Assistant believes is unavailable.
+    """
+    st, fake = _state(), FakeClient()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub.sync(st)
+    fake.published.clear()
+
+    fake.simulate_reconnect()
+
+    assert ("ac_monitor/status", "online", True) in fake.published
+
+
+def test_reconnect_resends_discovery():
+    """A broker that came back without its retained store has forgotten us."""
+    st, fake = _state(), FakeClient()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub.sync(st)
+    fake.published.clear()
+
+    fake.simulate_reconnect()
+    pub.sync(st)
+
+    assert any(t.endswith("/config") for t, _, _ in fake.published)
