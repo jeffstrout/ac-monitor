@@ -1,50 +1,104 @@
 """The single-page dashboard + control panel (served at ``/``).
 
 Responsive: fluid layout, touch-friendly controls, horizontally scrollable
-tables on narrow screens, and light/dark following ``prefers-color-scheme``.
-Self-contained (inline CSS/JS, no framework) to fit the appliance deploy.
+tables on narrow screens. Styled from the shared homelab design tokens
+(``/static/tokens.css``); everything app-specific stays inline here, so the
+appliance still deploys as one file plus one stylesheet.
+
+Light only, per homelab-standards — one palette means one set of contrast
+decisions to verify, and this panel is read in a lit plant room.
 """
 
 DASHBOARD = """<!doctype html>
 <title>AC Monitor</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="stylesheet" href="/static/tokens.css">
 <style>
- :root{--bg:#fff;--fg:#1a1a1a;--muted:#666;--line:#ddd;--card:#f5f5f5;
-       --ok:#0a7d00;--bad:#c00;--accent:#0a8f2f}
- @media (prefers-color-scheme:dark){:root{--bg:#15171a;--fg:#e8e8e8;--muted:#9aa0a6;
-       --line:#333;--card:#1e2126;--ok:#4caf50;--bad:#ef5350;--accent:#2e7d32}}
  *{box-sizing:border-box}
  html{-webkit-text-size-adjust:100%}
- body{font:16px/1.45 system-ui,-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--fg)}
+ body{font:var(--hl-text-base)/var(--hl-leading) var(--hl-font-sans);margin:0;
+      background:var(--hl-canvas);color:var(--hl-fg)}
  .wrap{max-width:760px;margin:0 auto;
-       padding:1rem max(1rem,env(safe-area-inset-right)) 2rem max(1rem,env(safe-area-inset-left))}
- h1{font-size:clamp(1.15rem,4vw,1.4rem);margin:.2rem 0}
- h2{font-size:1.05rem;margin:1.6rem 0 .5rem}
- .hero{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem .9rem;margin:.4rem 0 1rem}
- .big{font-size:clamp(2rem,11vw,2.6rem);font-weight:600;line-height:1}
- .muted{color:var(--muted)} .ok{color:var(--ok)} .fault,.fail{color:var(--bad)}
- .status{display:flex;flex-wrap:wrap;gap:.4rem 1.3rem;align-items:center;margin:.3rem 0}
- .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:.5rem}
+       padding:var(--hl-space-4) max(var(--hl-space-4),env(safe-area-inset-right))
+               var(--hl-space-6) max(var(--hl-space-4),env(safe-area-inset-left))}
+ h1{font-size:var(--hl-text-lg);margin:var(--hl-space-1) 0;font-weight:var(--hl-weight-semibold)}
+ h2{font-size:var(--hl-text-xs);text-transform:uppercase;letter-spacing:.05em;
+    color:var(--hl-fg-muted);margin:var(--hl-space-6) 0 var(--hl-space-3)}
+
+ /* Headline metric: air-side ΔT is what this appliance exists to report. */
+ .hero{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--hl-space-2) var(--hl-space-4);
+       margin:var(--hl-space-3) 0 var(--hl-space-4);padding:var(--hl-space-4);
+       background:var(--hl-surface);border:1px solid var(--hl-border);
+       border-radius:var(--hl-radius)}
+ .big{font-family:var(--hl-font-mono);font-variant-numeric:tabular-nums;
+      font-size:clamp(2rem,11vw,2.6rem);font-weight:var(--hl-weight-semibold);
+      line-height:1;letter-spacing:-.02em}
+ .muted{color:var(--hl-fg-muted)}
+ .ok{color:var(--hl-ok)} .fault,.fail{color:var(--hl-crit);font-weight:var(--hl-weight-semibold)}
+ .status{display:flex;flex-wrap:wrap;gap:var(--hl-space-2) var(--hl-space-5);
+         align-items:center;margin:var(--hl-space-2) 0}
+
+ .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;
+         border:1px solid var(--hl-border);border-radius:var(--hl-radius);
+         background:var(--hl-surface)}
  table{border-collapse:collapse;width:100%;min-width:300px}
- td,th{padding:.6rem .7rem;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+ td,th{padding:var(--hl-space-3);border-bottom:1px solid var(--hl-border);
+       text-align:left;white-space:nowrap;font-variant-numeric:tabular-nums}
+ th{background:var(--hl-canvas);font-size:var(--hl-text-xs);
+    font-weight:var(--hl-weight-semibold);letter-spacing:var(--hl-tracking-label);
+    color:var(--hl-fg-muted)}
  tr:last-child td{border-bottom:0}
- button{font:inherit;min-height:44px;padding:.4rem .9rem;margin:.15rem 0;border:1px solid var(--line);
-        border-radius:.55rem;background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}
+
+ button{font:var(--hl-weight-semibold) var(--hl-text-sm)/1 var(--hl-font-sans);
+        min-height:44px;padding:var(--hl-space-2) var(--hl-space-4);margin:2px 0;
+        border:1px solid var(--hl-border);border-radius:var(--hl-radius);
+        background:var(--hl-surface);color:var(--hl-fg);cursor:pointer;
+        touch-action:manipulation}
+ button:hover{background:var(--hl-sunken)}
  button:active{transform:translateY(1px)}
- .row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:end}
- .field{display:flex;flex-direction:column;gap:.2rem;font-size:.82rem;color:var(--muted)}
- input{font:inherit;min-height:44px;padding:.4rem .5rem;border:1px solid var(--line);
-        border-radius:.5rem;background:var(--bg);color:var(--fg);width:100%}
+ /* Primary action per group; Capture overwrites a calibration earned with a
+    thermometer, so it stays secondary on purpose. */
+ button.primary{background:var(--hl-accent);border-color:var(--hl-accent);
+                color:var(--hl-fg-on-accent)}
+ button.primary:hover{background:var(--hl-accent-hover)}
+
+ .row{display:flex;flex-wrap:wrap;gap:var(--hl-space-3);align-items:end}
+ .field{display:flex;flex-direction:column;gap:var(--hl-space-1);
+        font-size:var(--hl-text-xs);font-weight:var(--hl-weight-semibold);
+        letter-spacing:var(--hl-tracking-label);color:var(--hl-fg-muted)}
+ input{font:var(--hl-text-base)/1 var(--hl-font-sans);min-height:44px;
+       padding:var(--hl-space-2);border:1px solid var(--hl-border);
+       border-radius:var(--hl-radius-sm);background:var(--hl-surface);
+       color:var(--hl-fg);width:100%}
+ input:focus{border-color:var(--hl-accent);box-shadow:var(--hl-focus-ring);outline:none}
  .field input{width:9rem} .field.sm input{width:5rem}
- .pill{display:inline-block;border-radius:1rem;padding:.2rem .8rem;font-size:.85rem;color:#fff;white-space:nowrap}
- .on{background:var(--accent)} .off{background:#8a8a8a} .sys{background:#3060c0}
- .toggle{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin:.6rem 0}
- .capcell{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+
+ /* Pills: coloured text on a wash, plus a dot — state never rests on hue
+    alone. Toggles use the ACCENT, not green: an output you switch is
+    interaction, and green is reserved for health. */
+ .pill{display:inline-flex;align-items:center;gap:var(--hl-space-2);
+       border-radius:var(--hl-radius-pill);padding:5px var(--hl-space-3);
+       font-size:12px;font-weight:var(--hl-weight-semibold);white-space:nowrap;
+       border:1px solid currentColor}
+ .pill::before{content:"";width:6px;height:6px;border-radius:var(--hl-radius-pill);
+               background:currentColor;flex:none}
+ .on{color:var(--hl-accent);background:var(--hl-accent-wash)}
+ .off{color:var(--hl-fg-muted);background:var(--hl-sunken)}
+ /* system_status is an operating MODE (Cooling/Heating/Fan/Idle), not health —
+    none of those values is a fault, so it is informational, never red. */
+ .sys{color:var(--hl-info);background:var(--hl-info-wash)}
+ /* Health is separate: derived from the I2C bus and the active faults. */
+ .health-ok{color:var(--hl-ok);background:var(--hl-ok-wash)}
+ .health-bad{color:var(--hl-crit);background:var(--hl-crit-wash)}
+
+ .toggle{display:flex;flex-wrap:wrap;align-items:center;gap:var(--hl-space-3);
+         margin:var(--hl-space-3) 0;font-size:var(--hl-text-sm)}
+ .capcell{display:flex;flex-wrap:wrap;gap:var(--hl-space-1);align-items:center}
  .capcell input{width:4.5rem}
  @media (max-width:520px){
-   .wrap{padding:.75rem}
+   .wrap{padding:var(--hl-space-3)}
    .field{flex:1 1 45%} .field input,.field.sm input{width:100%}
-   td,th{padding:.5rem .55rem}
+   td,th{padding:var(--hl-space-2)}
  }
 </style>
 <div class="wrap">
@@ -54,6 +108,7 @@ DASHBOARD = """<!doctype html>
  <span class="big" id="dt">–</span>
  <span class="muted">air-side ΔT <span id="mode"></span></span>
  <span class="pill sys" id="sysStatus">–</span>
+ <span class="pill health-ok" id="healthPill">–</span>
 </div>
 <div class="scroll"><table id="temps"></table></div>
 <p class="status">Fan: <b id="fan">–</b> <span>Bus: <b id="bus">–</b></span></p>
@@ -71,7 +126,7 @@ DASHBOARD = """<!doctype html>
  <label class="field sm">port<input id="mqttPort" value="1883"></label>
  <label class="field">user<input id="mqttUser"></label>
  <label class="field">pass<input id="mqttPass" type="password"></label>
- <button onclick="saveMqtt()">Save broker</button>
+ <button class="primary" onclick="saveMqtt()">Save broker</button>
 </div>
 
 <h2>Calibration</h2>
@@ -109,7 +164,13 @@ async function refresh(){
  const dtCell = s.delta_t==null?'–':sgn(s.delta_t)+'°'+u;
  dt.textContent = dtCell;
  mode.textContent = s.mode?('('+s.mode+')'):'';
- sysStatus.textContent = 'System: '+(s.system_status||'–');
+ sysStatus.textContent = s.system_status||'–';
+ // Health is the bus plus any active fault — NOT system_status, which is only
+ // the operating mode (Cooling/Heating/Fan/Idle) and is never itself a problem.
+ const activeFaults=Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);
+ const healthy = s.i2c_ok && activeFaults.length===0;
+ healthPill.textContent = healthy?'Healthy':(s.i2c_ok?'Fault':'Bus down');
+ healthPill.className = 'pill '+(healthy?'health-ok':'health-bad');
  temps.innerHTML='<tr><th>Channel</th><th>Temp</th></tr>'+Object.entries(s.temps).map(([k,v])=>{
    const val=s.health[k]&&v!=null? sgn(v)+'°'+u : '<span class=fail>FAIL</span>';
    let row=`<tr><td>${label(k)}</td><td>${val}</td></tr>`;
@@ -117,8 +178,9 @@ async function refresh(){
    return row;}).join('');
  fan.textContent = s.fan_running==null?'FAIL':(s.fan_running?'RUNNING':'IDLE');
  bus.innerHTML = s.i2c_ok?'<span class=ok>OK</span>':'<span class=fault>DOWN</span>';
- const af=Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);
- faults.innerHTML = af.length?'<span class=fault>Faults: '+af.join(', ')+'</span>':'<span class=ok>No faults</span>';
+ faults.innerHTML = activeFaults.length
+   ? '<span class=fault>Faults: '+activeFaults.join(', ')+'</span>'
+   : '<span class=ok>No faults</span>';
  pill(displayState,s.toggles.display_push); pill(mqttState,s.toggles.mqtt);
  const v=s.version||{}, t=s.last_poll_at?new Date(s.last_poll_at*1000).toLocaleTimeString():'–';
  foot.textContent=`updated ${t} · poll #${s.poll_count} · build ${v.commit||''}`;
