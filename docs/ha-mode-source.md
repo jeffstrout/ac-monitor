@@ -2,6 +2,8 @@
 
 **Status:** design, nothing implemented.
 **Entity:** `climate.home` on Home Assistant at `192.168.0.105:8123`.
+**Confirmed 2026-07-28:** the entity reports `hvac_action`. Design is valid; see
+*Confirmed payload* below for what the real response changed.
 
 Today `system_status` is *inferred* from the sail switch plus the sign of air-side
 ΔT. This replaces the inference with the thermostat's own reported action, read
@@ -73,6 +75,42 @@ If `attributes.hvac_action` is absent, this design does not apply as written —
 falling back to `state` would report demand that isn't happening, which is worse
 than today's inference. Stop and reconsider rather than substituting it.
 
+### Confirmed payload (2026-07-28)
+
+```jsonc
+{
+  "state": "heat_cool",                 // hvac_mode — auto changeover
+  "attributes": {
+    "hvac_action": "cooling",           // ← what we read
+    "fan_mode": "auto",                 // fan_modes: ["on", "auto"]
+    "current_temperature": 70,
+    "target_temp_high": 70,             // dual setpoint;
+    "target_temp_low": 65,              // "temperature" is null in this mode
+    "current_humidity": 48.0
+  },
+  "last_changed":  "2026-07-28T14:48:48Z",
+  "last_reported": "2026-07-28T15:17:42Z"
+}
+```
+
+Three things this settled:
+
+**The system runs in `heat_cool` (auto changeover).** This is the strongest
+argument for the whole change: in auto mode the equipment chooses heating or
+cooling on its own, which is precisely where inferring direction from the sign of
+ΔT is most likely to be wrong. It also confirms `state` is useless as a mode
+source — `heat_cool` says nothing about what is happening now.
+
+**`fan_mode` exists**, and it resolves an open question below: the blower can be
+forced on independently of any heat/cool call. See the corrected
+`airflow_mismatch` condition.
+
+**Staleness must key off `last_reported`, not `last_changed`.** In the sample
+they are 29 minutes apart on a perfectly healthy entity — `last_changed` only
+moves when the state itself changes, and a thermostat can legitimately sit in one
+state for hours. Keying staleness on it would flag a working system as
+unavailable.
+
 ---
 
 ## Mapping
@@ -101,9 +139,21 @@ its band from **demand** rather than from the sign of ΔT.
 | `sensor_fault` | any channel unreadable | unchanged |
 | `no_airflow` | sail switch open past debounce | unchanged — still the sail switch |
 | `abnormal_delta_t` | ΔT outside the band **for the demanded mode** | no longer circular |
-| **`airflow_mismatch`** | demand active, sail switch open | **the blower-failure fault** |
+| **`airflow_mismatch`** | **airflow demanded** and sail switch open | **the blower-failure fault** |
 | **`wrong_direction`** | demand cooling but ΔT heating, or vice versa | only detectable with authoritative demand |
 | **`ha_unavailable`** | HA enabled but unreachable or stale | degraded, not broken |
+
+**"Airflow demanded" is not the same as "heating or cooling."** With
+`fan_modes: ["on", "auto"]` the blower can be forced to run with no call for
+heat or cool, so the condition is:
+
+```python
+airflow_demanded = hvac_action in ("heating", "cooling", "fan") or fan_mode == "on"
+```
+
+Using only `hvac_action` would miss a failed blower whenever the fan is set to
+run continuously — a silent gap in exactly the mode people leave thermostats in
+for air circulation.
 
 `wrong_direction` needs a deadband and a settle delay — a heat pump takes time to
 reverse, so the check must not fire during a legitimate changeover. Suggest
@@ -173,7 +223,7 @@ homeassistant:
   token: ""                               # long-lived access token
   entity_id: "climate.home"
   timeout_s: 3                            # must not stall the poll loop
-  stale_after_s: 60                       # older than this = unavailable
+  stale_after_s: 60                       # vs last_reported, NOT last_changed
   changeover_settle_s: 180                # suppress wrong_direction after a change
 ```
 
@@ -225,9 +275,9 @@ injected opener. Cases that matter —
 
 ## Open questions
 
-- Does `climate.home` expose the **fan** state separately? A thermostat in
-  "fan only" may report `hvac_action: fan`, which would make `Fan` authoritative
-  rather than inferred.
+*(Resolved 2026-07-28: yes, `climate.home` exposes `fan_mode` separately — folded
+into the `airflow_mismatch` condition above.)*
+
 - Should `airflow_mismatch` alert immediately or after N consecutive polls? A
   blower takes a few seconds to spin up after a call starts.
 - If HA is unavailable for a long period, should `ha_unavailable` escalate, or
