@@ -1,17 +1,23 @@
 """The single-page dashboard + control panel (served at ``/``).
 
-Responsive: fluid layout, touch-friendly controls, horizontally scrollable
-tables on narrow screens. Built from the shared homelab component sheet
-(``/static/tokens.css`` + ``/static/components.css``) — pills, tables, buttons,
-inputs and the shell header all come from there, so this appliance looks like
-the rest of the fleet rather than merely sharing its palette. Only genuinely
-app-specific styling stays inline.
+Built from the shared homelab component sheet (``/static/tokens.css`` +
+``/static/components.css``) — the shell header, the page column, section
+headings, the headline banner, pills, tables, buttons and inputs all come from
+there, so this appliance looks like the rest of the fleet rather than merely
+sharing its palette. Only genuinely app-specific styling stays inline.
+
+Responsive behaviour is the shared sheet's too: fluid layout, safe-area insets,
+horizontally scrollable tables, and touch targets gated on
+``@media (pointer: coarse)`` rather than viewport width. This file used to own
+all of that and applied the 44px floor unconditionally, which got the phone
+right and cost the desktop density.
 
 Light only, per homelab-standards — one palette means one set of contrast
 decisions to verify, and this panel is read in a lit plant room.
 """
 
 DASHBOARD = """<!doctype html>
+<meta charset="utf-8">
 <title>AC Monitor</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="stylesheet" href="/static/tokens.css">
@@ -24,31 +30,25 @@ DASHBOARD = """<!doctype html>
  html{-webkit-text-size-adjust:100%}
  body{font:var(--hl-text-base)/var(--hl-leading) var(--hl-font-sans);margin:0;
       background:var(--hl-canvas);color:var(--hl-fg)}
- .wrap{max-width:760px;margin:0 auto;
-       padding:var(--hl-space-4) max(var(--hl-space-4),env(safe-area-inset-right))
-               var(--hl-space-6) max(var(--hl-space-4),env(safe-area-inset-left))}
- h2{margin:var(--hl-space-6) 0 var(--hl-space-3)}
 
- /* Headline metric: air-side ΔT is what this appliance exists to report. Too
-    specific to be a stat tile — it is one number at display size. */
- .hero{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--hl-space-2) var(--hl-space-4);
-       margin:var(--hl-space-3) 0 var(--hl-space-4);padding:var(--hl-space-4);
-       background:var(--hl-surface);border:1px solid var(--hl-border);
-       border-radius:var(--hl-radius)}
- .big{font-family:var(--hl-font-mono);font-variant-numeric:tabular-nums;
-      font-size:clamp(2rem,11vw,2.6rem);font-weight:var(--hl-weight-semibold);
-      line-height:1;letter-spacing:-.02em}
+ /* The page column, section headings, the headline banner, touch targets and
+    the narrow-screen table padding all come from components.css now. The
+    safe-area insets this file worked out first moved INTO .hl-page, so every
+    appliance gets them.
+
+    The 44px floor moved too, and got a better predicate: it was unconditional
+    here, which made a desktop pay for touch density. The shared sheet gates it
+    on @media (pointer: coarse) — a narrow desktop window is not a touchscreen,
+    a landscape tablet is one. That also fixes the input font size: 13px made
+    mobile Safari zoom the viewport on focus and never zoom back out, which hit
+    every field on this panel on the exact device it is used from. */
+ /* Spacing between the banner and the temps table under it — sibling layout,
+    not a re-declaration of the shared component's appearance. */
+ #hero{margin-bottom:var(--hl-space-4)}
  .muted{color:var(--hl-fg-muted)}
  .ok{color:var(--hl-ok)} .fault,.fail{color:var(--hl-crit);font-weight:var(--hl-weight-semibold)}
  .status{display:flex;flex-wrap:wrap;gap:var(--hl-space-2) var(--hl-space-5);
          align-items:center;margin:var(--hl-space-2) 0}
-
- /* Touch targets: this panel gets used on a phone in a plant room, so the
-    shared controls get a 44px floor here rather than in the shared sheet,
-    where a desktop-only surface shouldn't pay for it. */
- .hl-btn{min-height:44px;touch-action:manipulation}
- .hl-btn:active{transform:translateY(1px)}
- .hl-input{min-height:44px}
 
  .row{display:flex;flex-wrap:wrap;gap:var(--hl-space-3);align-items:end}
  .field{display:flex;flex-direction:column;gap:var(--hl-space-1)}
@@ -59,9 +59,12 @@ DASHBOARD = """<!doctype html>
  .capcell{display:flex;flex-wrap:wrap;gap:var(--hl-space-1);align-items:center}
  .capcell .hl-input{width:4.5rem}
  @media (max-width:520px){
-   .wrap{padding:var(--hl-space-3)}
    .field{flex:1 1 45%} .field .hl-input,.field.sm .hl-input{width:100%}
-   .hl-table td,.hl-table th{padding:var(--hl-space-2)}
+   /* The actions column — an input plus two buttons — was what forced the
+      calibration table to scroll on every phone visit. Stacking it lets the
+      table's real content set the width instead. */
+   .capcell{flex-direction:column;align-items:stretch}
+   .capcell .hl-input{width:100%}
  }
 </style>
 
@@ -77,12 +80,15 @@ DASHBOARD = """<!doctype html>
   <a class="hl-header-link" href="/docs" target="_blank" rel="noopener">API&nbsp;docs</a>
   <a class="hl-header-link" href="/api/state" target="_blank" rel="noopener">State&nbsp;JSON</a>
  </nav>
- <span class="hl-header-meta" id="build"></span>
 </header>
 
-<div class="wrap">
-<div class="hero">
- <span class="big" id="dt">–</span>
+<div class="hl-page">
+<!-- Headline metric: air-side ΔT is what this appliance exists to report. It is
+     the same shape as syslog's summary block — the thing you read before you
+     read anything else — so it is .hl-banner now rather than a local .hero. -->
+<section class="hl-section">
+<div class="hl-banner hl-banner--row" id="hero">
+ <span class="hl-banner-metric" id="dt">–</span>
  <span class="muted">air-side ΔT <span id="mode"></span></span>
  <span class="hl-pill hl-pill--info" id="sysStatus">–</span>
  <span class="muted" id="modeSrc"></span>
@@ -90,8 +96,10 @@ DASHBOARD = """<!doctype html>
 <div class="hl-table-wrap"><table class="hl-table" id="temps"></table></div>
 <p class="status">Fan: <b id="fan">–</b> <span>Bus: <b id="bus">–</b></span></p>
 <p id="faults"></p>
+</section>
 
-<h2 class="hl-label">Outputs</h2>
+<section class="hl-section">
+<h2 class="hl-section-title">Outputs</h2>
 <div class="toggle">Split-flap display (slot 2):
  <span id="displayState" class="hl-pill hl-pill--info">?</span>
  <button class="hl-btn" onclick="toggle('display')">Toggle</button></div>
@@ -105,16 +113,28 @@ DASHBOARD = """<!doctype html>
  <label class="field"><span class="hl-label">pass</span><input class="hl-input" id="mqttPass" type="password"></label>
  <button class="hl-btn hl-btn--primary" onclick="saveMqtt()">Save broker</button>
 </div>
+</section>
 
-<h2 class="hl-label">Calibration</h2>
-<p class="muted">Dip a probe in water at a known temperature, read it with a good
+<section class="hl-section">
+<h2 class="hl-section-title">Calibration</h2>
+<p class="hl-note">Dip a probe in water at a known temperature, read it with a good
  thermometer, type that value into the channel's box and press Capture. Two
  well-separated captures (e.g. cold and hot water) fit that channel's gain/offset
  — they don't have to be exactly ice or boiling.</p>
 <div class="hl-table-wrap"><table class="hl-table" id="cal"></table></div>
-
-<p class="muted" id="foot"></p>
+</section>
 </div>
+
+<!-- Provenance, where every appliance carries it (homelab-standards#8). The
+     commit used to sit right-most in the header; the header is the row you
+     scan, and "which build is this" is a question you go looking for once.
+     Pairing it with the poll line puts liveness and provenance together —
+     "is the box alive" and "is it current" are the same investigation. -->
+<footer class="hl-footer">
+ <span id="foot"></span>
+ <span class="hl-footer-spacer"></span>
+ <span class="hl-footer-meta" id="build"></span>
+</footer>
 <script>
 const LABELS={output_air:'Supply_Air',input_air:'Return_Air',suction_line:'Suction_Line',liquid_line:'Liquid_Line'};
 const label=k=>LABELS[k]||k;
@@ -179,17 +199,17 @@ async function refresh(){
  const t=s.last_poll_at?new Date(s.last_poll_at*1000).toLocaleTimeString():'–';
  foot.textContent=`updated ${t} · poll #${s.poll_count}`;
 }
-// The running build, in the shell header where every appliance carries it.
-// This read `s.version` from /api/state, which has no such key — snapshot()
-// never exposed one — so the footer has always rendered "build " and nothing
-// else. /api/version is the only way to confirm a Watchtower update landed,
-// so it silently failed at the one job it had. Fetched once: it cannot change
-// without the process restarting.
+// The running build, in the footer where every appliance now carries it
+// (homelab-standards#8). This read `s.version` from /api/state, which has no
+// such key — snapshot() never exposed one — so the line rendered "build " and
+// nothing else for its entire life. /api/version is the only way to confirm a
+// Watchtower update landed, so it silently failed at the one job it had.
+// Fetched once: it cannot change without the process restarting.
 async function loadBuild(){
  try{
   const v=await j('/api/version');
-  // Date only — the header is scanned, not read, and the commit is the part
-  // that identifies the build.
+  // Date only — this is provenance you check, not read, and the commit is the
+  // part that identifies the build.
   build.textContent=[v.commit,(v.built_at||'').slice(0,10)].filter(Boolean).join(' · ')||'dev';
  }catch(e){ build.textContent=''; }
 }
