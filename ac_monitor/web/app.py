@@ -2,6 +2,7 @@
 
 Routes:
   GET  /                     dashboard + control panel
+  GET  /api/docs             the shared fleet API reference page
   GET  /api/state            latest readings + derived + toggles
   GET  /api/version          build provenance
   GET  /api/calibration      per-channel gain/offset + capture points
@@ -35,6 +36,7 @@ from ..hat import HatBackend, HatError, IoplusBackend
 from ..poller import poll_loop, poll_once
 from ..state import AppState
 from ..version import get_version
+from . import api_docs
 from .page import DASHBOARD
 
 
@@ -94,7 +96,45 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
             stop.set()
             task.cancel()
 
-    app = FastAPI(title="AC Monitor", lifespan=lifespan)
+    # The description and tags are not decoration: /api/docs renders the shared
+    # fleet reference page from this schema (homelab-standards#10), so anything
+    # not declared here is missing from the docs. Swagger used to hide that
+    # behind its own chrome — the app declared a bare title= and 13 untagged,
+    # unsummarised routes.
+    app = FastAPI(
+        title="AC Monitor",
+        version="1.0.0",
+        description=(
+            "Reads four thermistors on a Raspberry Pi HAT and reports air-side "
+            "**ΔT** — return air minus supply air — which is the number that "
+            "tells you whether an air conditioner is actually cooling.\n\n"
+            "Temperatures are served in the unit the panel is configured for; "
+            "calibration always speaks **Celsius**. All endpoints are "
+            "unauthenticated and intended for use on a trusted LAN."
+        ),
+        openapi_tags=[
+            {
+                "name": "telemetry",
+                "description": "Current readings, derived state and faults.",
+            },
+            {
+                "name": "outputs",
+                "description": (
+                    "Toggle where readings are published and configure the broker. "
+                    "Changes persist across restarts."
+                ),
+            },
+            {
+                "name": "calibration",
+                "description": (
+                    "Fit each channel's gain and offset from known-temperature "
+                    "captures. Two well-separated points fit a channel."
+                ),
+            },
+            {"name": "health", "description": "Liveness and build provenance."},
+        ],
+        lifespan=lifespan,
+    )
 
     def _require_role(role: str) -> None:
         if role not in state.config.thermistors.channels:
@@ -108,25 +148,25 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
         name="static",
     )
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def dashboard() -> str:
         return DASHBOARD
 
-    @app.get("/api/state")
+    @app.get("/api/state", tags=["telemetry"], summary="Everything the panel renders")
     def api_state() -> JSONResponse:
         snap = state.snapshot()
         snap["version"] = get_version()
         return JSONResponse(snap)
 
-    @app.get("/api/version")
+    @app.get("/api/version", tags=["health"], summary="Running build")
     def api_version() -> dict:
         return get_version()
 
-    @app.get("/api/calibration")
+    @app.get("/api/calibration", tags=["calibration"], summary="Per-channel gain, offset and captures")
     def api_calibration() -> dict:
         return _calibration_view(state)
 
-    @app.get("/api/health")
+    @app.get("/api/health", tags=["health"], summary="Health check")
     def health() -> JSONResponse:
         """Health per the homelab appliance contract.
 
@@ -150,13 +190,29 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
         """Deprecated alias for /api/health — kept so existing probes don't break."""
         return health()
 
-    @app.post("/api/toggle/display")
+    @app.get("/api/docs", response_class=HTMLResponse, include_in_schema=False)
+    def api_reference() -> str:
+        """The fleet's shared API reference page.
+
+        What the shell header's `API docs` link points at on every appliance.
+        FastAPI's `/docs` stays mounted for interactive use, but it fetches
+        swagger-ui from a CDN and renders an empty shell on a LAN with no route
+        out — which is when you reach for it, in a plant room, because
+        something is wrong (jeffstrout/homelab-standards#7).
+
+        Rendered from `app.openapi()`, so it cannot drift from the routes.
+        """
+        return api_docs.render(
+            app, version=get_version(), back=("/", "Control panel")
+        )
+
+    @app.post("/api/toggle/display", tags=["outputs"], summary="Toggle the split-flap push")
     def toggle_display() -> dict:
         state.config.display.enabled = not state.config.display.enabled
         state.persist()
         return {"display_push": state.config.display.enabled}
 
-    @app.post("/api/toggle/mqtt")
+    @app.post("/api/toggle/mqtt", tags=["outputs"], summary="Toggle MQTT publishing")
     def toggle_mqtt() -> dict:
         if not state.config.mqtt.enabled and not state.config.mqtt.host:
             raise HTTPException(status_code=409, detail="set the MQTT broker host first")
@@ -164,13 +220,13 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
         state.persist()
         return {"mqtt": state.config.mqtt.enabled}
 
-    @app.post("/api/toggle/relaytest")
+    @app.post("/api/toggle/relaytest", tags=["outputs"], summary="Toggle the relay self-test")
     def toggle_relaytest() -> dict:
         state.config.relay_selftest.enabled = not state.config.relay_selftest.enabled
         state.persist()
         return {"relay_test": state.config.relay_selftest.enabled}
 
-    @app.post("/api/mqtt/config")
+    @app.post("/api/mqtt/config", tags=["outputs"], summary="Set the MQTT broker")
     def mqtt_config(req: MqttCfgReq) -> dict:
         m = state.config.mqtt
         if req.host is not None:
@@ -184,7 +240,7 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
         state.persist()
         return {"host": m.host, "port": m.port, "username": m.username, "enabled": m.enabled}
 
-    @app.post("/api/calibrate/capture")
+    @app.post("/api/calibrate/capture", tags=["calibration"], summary="Capture a known-temperature point (°C)")
     def calibrate_capture(req: CaptureReq) -> dict:
         _require_role(req.role)
         v = state.readings.volts.get(req.role) if state.readings else None
@@ -208,14 +264,14 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
                 result["calibration"] = {"gain": cal.gain, "offset": cal.offset}
         return result
 
-    @app.post("/api/calibrate/manual")
+    @app.post("/api/calibrate/manual", tags=["calibration"], summary="Set gain and offset directly")
     def calibrate_manual(req: ManualCalReq) -> dict:
         _require_role(req.role)
         state.config.thermistors.channel_calibration[req.role] = Calibration(req.gain, req.offset)
         state.persist()
         return {"role": req.role, "gain": req.gain, "offset": req.offset}
 
-    @app.post("/api/calibrate/reset")
+    @app.post("/api/calibrate/reset", tags=["calibration"], summary="Drop a channel's calibration")
     def calibrate_reset(req: RoleReq) -> dict:
         _require_role(req.role)
         state.captures.pop(req.role, None)

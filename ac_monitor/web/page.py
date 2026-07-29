@@ -77,7 +77,9 @@ DASHBOARD = """<!doctype html>
        contract spelling. Opened in a new tab so a JSON detour doesn't cost you
        the panel you were reading. -->
   <a class="hl-header-link" href="/api/health" target="_blank" rel="noopener">Health</a>
-  <a class="hl-header-link" href="/docs" target="_blank" rel="noopener">API&nbsp;docs</a>
+  <!-- /api/docs, not FastAPI's /docs: the shared reference page renders offline,
+       where swagger-ui's CDN assets do not (homelab-standards#7). -->
+  <a class="hl-header-link" href="/api/docs" target="_blank" rel="noopener">API&nbsp;docs</a>
   <a class="hl-header-link" href="/api/state" target="_blank" rel="noopener">State&nbsp;JSON</a>
  </nav>
 </header>
