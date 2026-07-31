@@ -52,6 +52,23 @@ and [docs/i2c-lockup.md](docs/i2c-lockup.md).
 - **[Vendor docs](Hardware%20Documentation/)** — Sequent HAT user guide (the Setra 265 and
   Sensirion SDP8xx datasheets are from superseded pressure-sensor designs)
 
+## Checking a running appliance
+
+The unit tests run against a fake HAT backend. To check the **running** box —
+real I²C, real config file, real persistence — run the smoke test against it:
+
+```bash
+python3 deploy/smoke-test.py http://192.168.0.42:8080
+```
+
+Standard library only, so it works on the Pi with nothing installed. It reads
+every endpoint, round-trips both toggles and the MQTT broker config, and
+restores what it changed (in a `finally`, so an early failure still restores).
+Exit status is 0 only if everything passed.
+
+Calibration writes are behind `--calibration` and off by default: a reset
+discards capture points that cannot be reconstructed from the API.
+
 ## Target platform
 
 - Raspberry Pi 3B+, Raspberry Pi OS (64-bit, Bookworm or newer)
