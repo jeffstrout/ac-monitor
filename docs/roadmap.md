@@ -15,8 +15,9 @@ independently useful and testable.
 - Assemble Pi + HAT; enable I²C. ✅
 - Verify the HAT answers on the bus (`i2cdetect -y 1` → `0x28`; `ioplus 0 board`). ✅
 - Read the 10 kΩ NTC thermistors on `AD1`–`AD4` (`ioplus 0 adcrd <ch>`), convert
-  volts → °C, and field-calibrate against ice + boiling. ✅ *(AD1/AD2 done; AD3/AD4
-  pending wiring — see [calibration.md](calibration.md))*
+  volts → °C, and field-calibrate against ice + boiling. ✅ *(all four channels carry
+  per-channel coefficients; AD1's are averaged from the other three because its probe is
+  not accessible — see [calibration.md](calibration.md))*
 - Confirm the sail switch reads on HAT opto input 1. ✅
 - **⚠ Open blocker — intermittent I²C bus lockup.** The HAT latches its bus and needs a
   full power cycle to recover; it happens on the plain sensor-reading workload (~hours).
