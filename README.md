@@ -2,12 +2,12 @@
 
 HVAC monitoring for a residential air handler, built on a **Raspberry Pi 5** and a
 **Sequent Microsystems Home Automation HAT**. The system reads duct/refrigerant-line
-temperatures and an airflow sail switch, then serves a live web dashboard and publishes
+temperatures and an airflow pressure switch, then serves a live web dashboard and publishes
 everything to **Home Assistant** over MQTT.
 
 > **Status:** ✅ Running. The poller, web control panel, calibration editor, MQTT/Home
 > Assistant integration, and split-flap display push are all implemented, with a
-> 93-test suite. Deployed to the Pi via GHCR + Watchtower — see
+> 152-test suite. Deployed to the Pi via GHCR + Watchtower — see
 > [docs/auto-update.md](docs/auto-update.md). Remaining work is tracked in
 > [issues](https://github.com/jeffstrout/ac-monitor/issues); the longer-range
 > roadmap is in [docs/roadmap.md](docs/roadmap.md).
@@ -17,8 +17,10 @@ everything to **Home Assistant** over MQTT.
 ## What it does
 
 - **4× temperature probes** (10 kΩ NTC thermistors on HAT analog inputs) — suction line, liquid line, input air, output air
-- **Airflow proof** (sail switch) — confirms air is actually moving in the duct
+- **Airflow proof** (diaphragm pressure switch) — confirms air is actually moving in the duct
 - **Derived metrics** — air-side ΔT (input − output) and refrigerant line temps
+- **"Running but not delivering" faults** — the thermostat calls, and either the blower
+  never turns or ΔT never develops; both escalate the status to **Error**
 - **Web dashboard** — live readings in the browser
 - **Home Assistant** — auto-discovered sensors & binary sensors via MQTT
 - **Hands-off updates** — merge a PR and the Pi self-updates via GHCR + Watchtower ([details](docs/auto-update.md))
@@ -31,7 +33,7 @@ signals through the HAT's opto-isolated inputs (see the [roadmap](docs/roadmap.m
 | Signal | Sensor | Interface | Terminates on |
 |---|---|---|---|
 | 4× line/air temps | 10 kΩ NTC thermistor (DROK B3950) | Analog voltage divider | HAT analog inputs AD1–AD4 |
-| Airflow proof | Sail switch (dry contact) | Contact closure | HAT opto input 1 |
+| Airflow proof | Diaphragm pressure switch (dry contact) | Contact closure | HAT opto input 5 |
 
 **Every field signal lands on the Sequent board** — nothing field-wired touches the Pi
 header. Earlier revisions used DS18B20 1-Wire probes for temperature and a Setra 265

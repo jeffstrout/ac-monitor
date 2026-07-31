@@ -4,7 +4,7 @@ This document describes the physical build: bill of materials, the I/O map on th
 Sequent Home Automation HAT, and per-sensor wiring.
 
 > **Every field signal terminates on the Sequent HAT.** Temperatures are read from 10 kΩ
-> NTC thermistors on the HAT's analog inputs; airflow is proven by a dry-contact sail switch
+> NTC thermistors on the HAT's analog inputs; airflow is proven by a dry-contact pressure switch
 > on an opto input. Nothing field-wired touches the Pi header.
 
 > **Design change (2026):** earlier revisions used DS18B20 1-Wire probes for temperature and
@@ -21,12 +21,12 @@ Sequent Home Automation HAT, and per-sensor wiring.
 | 1 | Sequent Microsystems Home Automation HAT | Stack level 0 (DIP switches → all off) |
 | 1 | 5 V / ≥3 A regulated power supply | Powers Pi + HAT |
 | 4 | **DROK 10 kΩ B3950 NTC thermistor**, waterproof stainless probe, 3 m lead | Amazon `B01MZ6Y336`; −25 to 125 °C. 2× strap to refrigerant lines, 2× in the air stream |
-| 1 | Sail switch (air-proving switch, SPDT dry contact) | e.g. a furnace/duct sail switch |
+| 1 | Diaphragm pressure switch (air-proving, dry contact) | Closes on blower pressure differential; replaced the original sail switch 2026-07-31 |
 | — | Ferrules / 26–16 AWG wire | HAT uses pluggable screw terminals |
 
 No external resistors are required: each analog input has a **15 kΩ pull-up to 3.3 V** built
 into the HAT (forms the thermistor divider), and each opto input has a 1 kΩ pull-up for the
-dry-contact sail switch.
+dry-contact air-proving switch.
 
 ## 2. HAT I/O map
 
@@ -50,9 +50,9 @@ control/expansion.
 > (User's Guide V5, p. 12). The AD1–AD4 connector pin order (top→bottom) is `GND` (1),
 > `AD4` (2), `AD3` (3), `AD2` (4), `AD1` (5).
 
-> **Note:** the airflow-proof **sail switch is wired to OPTO-5** (bank B), indicating whether
-> the blower is running (fan running/idle). Earlier revisions used OPTO-1; §5 and the §3
-> wiring diagram reflect the OPTO-5 wiring.
+> **Note:** the airflow-proof **pressure switch is wired to OPTO-5** (bank B), indicating whether
+> the blower is running (fan running/idle). Earlier revisions used OPTO-1 and a sail switch;
+> §5 and the §3 wiring diagram reflect the as-built OPTO-5 pressure switch.
 
 ### Opto input terminals — two banks, second one reversed
 
@@ -120,7 +120,7 @@ flowchart LR
       T2["Thermistor<br/>Input/return air"]
       T3["Thermistor<br/>Suction line"]
       T4["Thermistor<br/>Liquid line"]
-      SAIL["Sail switch<br/>(fan-running proof)"]
+      SAIL["Pressure switch<br/>(fan-running proof)"]
     end
 
     subgraph HAT["Sequent Home Automation HAT"]
@@ -189,18 +189,29 @@ Quick read of one channel:
 ioplus 0 adcrd 1
 ```
 
-## 5. Sail switch (fan-running proof) — OPTO-5
+## 5. Airflow proof (fan-running) — OPTO-5
 
-A sail switch is a simple SPDT dry contact that closes when duct airflow deflects its vane —
-so it reads whether the blower is actually running. Wire the **normally-open** contact
-between `OPTO-5` and **bank B's `GND`** (the two outermost pins of the right-edge connector):
+**As built (2026-07-31): a diaphragm pressure switch.** It closes on the pressure
+differential the running blower creates across it, so it reads whether the blower is
+actually moving air. It replaces the sail switch fitted earlier and removed on 07-28 —
+same input, same contact convention, no software change beyond `airflow.enabled`.
+
+Wire the **normally-open** contact between `OPTO-5` and **bank B's `GND`** (the two
+outermost pins of the right-edge connector):
 
 - Fan running (airflow) → contact closed → `ioplus 0 optrd 5` reads **1**.
 - Fan idle (no airflow) → contact open → reads **0**.
 
+If your switch is landed on its **NC** contact instead, set
+`sensors.digital.fan.active_high: false` rather than rewiring.
+
 The opto inputs already have a 1 kΩ pull-up to 5 V internally, so no external components are
-needed for a dry-contact sail switch. Return the closure to **bank B's own `GND`** pin (top of
+needed for a dry contact. Return the closure to **bank B's own `GND`** pin (top of
 the right-edge connector) — see the opto bank table in §2.
+
+> **Do not point the relay self-test at OPTO-5.** `relay_selftest.opto_channel` must be a
+> spare input now that this one carries a real sensor, or the loopback will read the
+> pressure switch and report failures that aren't there.
 
 ## 6. Future: thermostat call signals (24 VAC)
 

@@ -154,3 +154,20 @@ class HaSource:
     def demand(self, cfg, now: float) -> str | None:
         """The authoritative action, or None when we cannot vouch for it."""
         return self.reading.action if self.available(cfg, now) else None
+
+    def demand_for(self, cfg, now: float) -> float | None:
+        """Seconds the current action has been in effect, or None if unknown.
+
+        The clock the "is it actually delivering?" checks run on: a blower gets a
+        spin-up grace and a coil gets time to develop ΔT, both measured from when
+        the call started rather than from process start. ``action_since`` moves on
+        every action change, so a heat-pump changeover restarts both windows —
+        the same property ``settled()`` relies on.
+
+        None (rather than 0.0) when there is no vouched-for demand or we have not
+        seen a change yet: callers must suppress a timed check they cannot time,
+        not treat it as freshly started.
+        """
+        if self.action_since is None or not self.available(cfg, now):
+            return None
+        return max(0.0, now - self.action_since)

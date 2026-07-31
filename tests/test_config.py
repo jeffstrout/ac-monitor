@@ -28,6 +28,40 @@ def test_defaults_when_empty():
     assert cfg.display.slot == 2
     assert cfg.display.enabled is True     # display push on by default
     assert cfg.mqtt.enabled is False
+    # The OPTO-5 pressure switch is fitted, so a fresh seed matches the hardware.
+    assert cfg.airflow.enabled is True
+
+
+def test_develop_thresholds_default_to_the_commissioned_values():
+    dt = cfgmod.from_dict({}).thresholds.delta_t
+    assert dt.cooling_develop_f == 10.0
+    assert dt.heating_develop_f == -20.0
+    assert dt.develop_after_s == 120.0
+
+
+def test_develop_thresholds_round_trip(tmp_path):
+    cfg = cfgmod.from_dict(
+        {"thresholds": {"delta_t": {"cooling_develop_f": 12, "heating_develop_f": -18,
+                                    "develop_after_s": 90}},
+         "airflow": {"enabled": True, "prove_after_s": 45}}
+    )
+    p = tmp_path / "config.yaml"
+    cfgmod.save(cfg, p)
+    back = cfgmod.load(p)
+
+    assert back.thresholds.delta_t.cooling_develop_f == 12.0
+    assert back.thresholds.delta_t.heating_develop_f == -18.0
+    assert back.thresholds.delta_t.develop_after_s == 90.0
+    assert back.airflow.prove_after_s == 45.0
+
+
+def test_develop_threshold_signs_are_enforced():
+    """A sign error would invert the check silently — a system delivering nothing
+    would read as healthy."""
+    with pytest.raises(ConfigError, match="cooling_develop_f"):
+        cfgmod.from_dict({"thresholds": {"delta_t": {"cooling_develop_f": -10}}})
+    with pytest.raises(ConfigError, match="heating_develop_f"):
+        cfgmod.from_dict({"thresholds": {"delta_t": {"heating_develop_f": 20}}})
 
 
 def test_missing_file_raises():

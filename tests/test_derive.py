@@ -15,13 +15,13 @@ def _readings(input_c, output_c, fan=True, health=None):
     return r
 
 
-# Default deployment: no Home Assistant, no airflow sensor.
+# Default deployment: no Home Assistant, airflow sensor fitted (OPTO-5).
 CFG = cfgmod.from_dict({})
+CFG_AIRFLOW = cfgmod.from_dict({"airflow": {"enabled": True}})   # explicit, same thing
 
-# The sail switch is removed from the live unit, but the logic is retained behind
-# airflow.enabled. These tests keep exercising it so restoring the sensor is a
-# config flag plus wiring rather than a rewrite.
-CFG_AIRFLOW = cfgmod.from_dict({"airflow": {"enabled": True}})
+# A unit with no airflow sensor — the checks that depend on one must degrade,
+# not fault.
+CFG_NO_AIRFLOW = cfgmod.from_dict({"airflow": {"enabled": False}})
 
 # Home Assistant configured — demand is authoritative.
 CFG_HA = cfgmod.from_dict(
@@ -177,8 +177,9 @@ def test_mode_source_marks_facts_apart_from_guesses():
     assert derive.compute(_readings(25, 15), CFG_HA).mode_source == "unavailable"
 
 
-def test_no_airflow_fault_is_off_while_the_sail_switch_is_removed():
-    d = derive.compute(_readings(25, 15, fan=False), CFG)
+def test_no_airflow_fault_is_gated_on_having_a_sensor():
+    """A unit with no airflow sensor fitted must degrade, not fault."""
+    d = derive.compute(_readings(25, 15, fan=False), CFG_NO_AIRFLOW)
     assert d.faults["no_airflow"] is False
 
     d = derive.compute(_readings(25, 15, fan=False), CFG_AIRFLOW)
@@ -187,3 +188,146 @@ def test_no_airflow_fault_is_off_while_the_sail_switch_is_removed():
 
 def test_ha_unavailable_not_raised_when_ha_is_simply_not_configured():
     assert derive.compute(_readings(25, 15), CFG).faults["ha_unavailable"] is False
+
+
+# --- running, but not delivering (issue #64) ---------------------------------
+#
+# Two checks that need BOTH authoritative demand and sensed airflow. Both are
+# timed from the start of the call: equipment gets its spin-up and warm-up before
+# being accused of failing.
+
+GRACE = 61.0        # past airflow.prove_after_s (60)
+DEVELOPED = 121.0   # past thresholds.delta_t.develop_after_s (120)
+
+
+def test_airflow_mismatch_when_a_call_is_active_and_the_blower_is_not_turning():
+    d = derive.compute(
+        _readings(25, 24, fan=False), CFG_HA, demand="cooling", demand_for_s=GRACE
+    )
+    assert d.faults["airflow_mismatch"] is True
+    assert d.system_status == "Error"
+
+
+def test_airflow_mismatch_holds_off_during_blower_spin_up():
+    """A furnace delays the blower 30-90 s; faulting at t=0 would fire every cycle."""
+    d = derive.compute(
+        _readings(25, 24, fan=False), CFG_HA, demand="heating", demand_for_s=5.0
+    )
+    assert d.faults["airflow_mismatch"] is False
+    assert d.system_status == "Heating"
+
+
+def test_airflow_mismatch_fires_on_fan_only_call():
+    d = derive.compute(
+        _readings(25, 24, fan=False), CFG_HA, demand="fan", demand_for_s=GRACE
+    )
+    assert d.faults["airflow_mismatch"] is True
+
+
+def test_airflow_mismatch_fires_when_the_fan_is_set_to_run_continuously():
+    """hvac_action alone would miss a dead blower in the mode people leave the
+    thermostat in for circulation — the gap docs/ha-mode-source.md called out."""
+    d = derive.compute(
+        _readings(25, 24, fan=False), CFG_HA, demand="idle", fan_mode="on",
+        demand_for_s=GRACE,
+    )
+    assert d.faults["airflow_mismatch"] is True
+
+
+def test_airflow_mismatch_quiet_when_idle_and_fan_on_auto():
+    d = derive.compute(
+        _readings(25, 24, fan=False), CFG_HA, demand="idle", fan_mode="auto",
+        demand_for_s=GRACE,
+    )
+    assert d.faults["airflow_mismatch"] is False
+    assert d.system_status == "Idle"
+
+
+def test_airflow_mismatch_quiet_when_the_blower_is_turning():
+    d = derive.compute(
+        _readings(25, 15, fan=True), CFG_HA, demand="cooling", demand_for_s=GRACE
+    )
+    assert d.faults["airflow_mismatch"] is False
+
+
+def test_airflow_mismatch_is_not_raised_by_a_failed_opto_read():
+    """fan_running None is a sensor problem, not an HVAC one."""
+    r = _readings(25, 24, fan=None, health={"input_air": True, "output_air": True, "fan": False})
+    d = derive.compute(r, CFG_HA, demand="cooling", demand_for_s=GRACE)
+
+    assert d.faults["airflow_mismatch"] is False
+    assert d.faults["sensor_fault"] is True
+
+
+def test_airflow_mismatch_needs_a_sensor():
+    d = derive.compute(
+        _readings(25, 24, fan=False), CFG_NO_AIRFLOW, demand="cooling", demand_for_s=GRACE
+    )
+    assert d.faults["airflow_mismatch"] is False
+
+
+def test_delta_t_not_developing_on_a_cooling_call_that_delivers_nothing():
+    # input 25 °C, output 22 °C -> ΔT +5.4 °F, short of the +10 floor.
+    d = derive.compute(_readings(25, 22), CFG_HA, demand="cooling", demand_for_s=DEVELOPED)
+
+    assert d.faults["delta_t_not_developing"] is True
+    assert d.system_status == "Error"
+    # The mode source is untouched — the thermostat still says what it says.
+    assert d.mode == "cooling"
+    assert d.mode_source == "home_assistant"
+
+
+def test_delta_t_not_developing_on_a_heating_call_that_delivers_nothing():
+    # output 5 °C warmer than input -> ΔT -9 °F, short of the -20 ceiling.
+    d = derive.compute(_readings(20, 25), CFG_HA, demand="heating", demand_for_s=DEVELOPED)
+    assert d.faults["delta_t_not_developing"] is True
+
+
+def test_delta_t_developed_is_quiet():
+    # cooling: 25 -> 17 °C is ΔT +14.4 °F, past +10.
+    d = derive.compute(_readings(25, 17), CFG_HA, demand="cooling", demand_for_s=DEVELOPED)
+    assert d.faults["delta_t_not_developing"] is False
+    assert d.system_status == "Cooling"
+
+    # heating: output 15 °C warmer -> ΔT -27 °F, past -20.
+    d = derive.compute(_readings(20, 35), CFG_HA, demand="heating", demand_for_s=DEVELOPED)
+    assert d.faults["delta_t_not_developing"] is False
+
+
+def test_delta_t_gets_the_full_window_before_it_is_judged():
+    """ΔT starts at zero on every cycle; the check exists to wait it out."""
+    d = derive.compute(_readings(25, 25), CFG_HA, demand="cooling", demand_for_s=30.0)
+    assert d.faults["delta_t_not_developing"] is False
+    assert d.system_status == "Cooling"
+
+
+def test_delta_t_not_developing_skipped_when_the_call_cannot_be_timed():
+    """No clock means no timed check — never a guess."""
+    d = derive.compute(_readings(25, 25), CFG_HA, demand="cooling", demand_for_s=None)
+    assert d.faults["delta_t_not_developing"] is False
+    assert d.faults["airflow_mismatch"] is False
+
+
+def test_neither_check_fires_without_authoritative_demand():
+    """HA unreachable: "no call" and "a call we cannot see" must not look alike."""
+    d = derive.compute(_readings(25, 25, fan=False), CFG_HA, demand=None, demand_for_s=DEVELOPED)
+
+    assert d.faults["airflow_mismatch"] is False
+    assert d.faults["delta_t_not_developing"] is False
+    assert d.system_status == "Unknown"
+
+
+def test_delta_t_not_developing_ignores_idle_and_fan_calls():
+    for action in ("idle", "off", "fan"):
+        d = derive.compute(_readings(25, 25), CFG_HA, demand=action, demand_for_s=DEVELOPED)
+        assert d.faults["delta_t_not_developing"] is False, action
+
+
+def test_error_status_does_not_disturb_the_reported_mode():
+    """The escalation is the headline only — /api/state's HA block is unchanged."""
+    d = derive.compute(
+        _readings(25, 24, fan=False), CFG_HA, demand="cooling", demand_for_s=DEVELOPED
+    )
+    assert d.system_status == "Error"
+    assert d.mode == "cooling"
+    assert d.mode_source == "home_assistant"

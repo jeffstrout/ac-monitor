@@ -180,7 +180,10 @@ async function refresh(){
  // values is a fault, so it stays neutral. --hl-info is a slate, deliberately
  // not the accent blue it used to be: a status pill must never look like a
  // button (homelab-standards#4).
- sysStatus.className = 'hl-pill hl-pill--'+(s.mode_source==='unavailable'?'warn':'info');
+ // "Error" is the one exception: the equipment is running and not delivering
+ // (no airflow on a call, or ΔT that never developed), which IS health.
+ sysStatus.className = 'hl-pill hl-pill--'+(
+   s.system_status==='Error'?'crit':(s.mode_source==='unavailable'?'warn':'info'));
  // Health is the bus plus any active fault — NOT system_status, which is only
  // the operating mode (Cooling/Heating/Fan/Idle) and is never itself a problem.
  const activeFaults=Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);

@@ -7,7 +7,7 @@ units:
 
 poll:
   interval_s: 5           # how often to read all sensors
-  fan_debounce_s: 5       # OPTO-5 sail switch: ignore flutter shorter than this (seconds)
+  fan_debounce_s: 5       # OPTO-5 airflow switch: ignore chatter shorter than this (seconds)
 
 sensors:
   # 10K NTC thermistors (DROK B3950) on HAT analog inputs AD1-AD4. Each thermistor wires
@@ -38,7 +38,7 @@ sensors:
   digital:
     hat_stack_level: 0
     fan:
-      opto_channel: 5       # OPTO-5: airflow-proof sail switch (fan running vs idle)
+      opto_channel: 5       # OPTO-5: airflow-proof pressure switch (fan running vs idle)
       active_high: true     # fan running => airflow => contact closed => active
     # Future (Phase 6) — thermostat call signals via 24 VAC pilot relays:
     # call_heat: { opto_channel: 2 }
@@ -50,6 +50,13 @@ thresholds:
     cooling_max_f: 22
     heating_min_f: 25     # expected heating ΔT band
     heating_max_f: 70
+    # "Is it actually conditioning?" — after a call has run develop_after_s, ΔT
+    # must have moved this far in the demanded direction or delta_t_not_developing
+    # fires and system_status becomes Error. Catches the failure that looks
+    # healthy: thermostat calling, blower turning, coil doing nothing.
+    cooling_develop_f: 10     # cooling ΔT must reach at least +10 °F
+    heating_develop_f: -20    # heating ΔT must reach at most -20 °F
+    develop_after_s: 120      # measured from the last hvac_action change
 
 # Split-flap display push (toggle + target set from the web control panel).
 display:
@@ -85,10 +92,12 @@ watchdog:
 # Relay↔opto loopback self-test / relay-activity stress test. When enabled, the
 # app toggles relay_channel every interval_s and checks that opto_channel follows
 # (relay wired to that opto input). Off by default; toggle from the control panel.
+# opto_channel must be a SPARE input — OPTO-5 carries the airflow pressure switch,
+# and aiming the loopback at it reports failures that aren't there.
 relay_selftest:
   enabled: false
   relay_channel: 5
-  opto_channel: 5
+  opto_channel: 8
   interval_s: 15
 
 # Authoritative system mode from Home Assistant's climate entity.
@@ -107,8 +116,13 @@ homeassistant:
   stale_after_s: 60          # since our last SUCCESSFUL fetch
   changeover_settle_s: 180   # heat pumps take time to reverse
 
-# Sail-switch airflow proof. Disabled 2026-07-28: the switch was removed pending
-# a replacement sensor. The logic and its tests are retained, so restoring it is
-# this flag plus wiring. OPTO-5 is unwired but reserved.
+# Airflow proof. Restored 2026-07-31 as a diaphragm pressure switch on OPTO-5,
+# replacing the sail switch removed on 07-28. With this on, airflow_mismatch
+# fires when the thermostat calls for heat/cool/fan (or fan_mode is "on") and the
+# blower isn't turning — and system_status becomes Error.
 airflow:
-  enabled: false
+  enabled: true
+  # Blower spin-up grace, from the last hvac_action change. A furnace delays the
+  # blower 30-90 s while the heat exchanger warms; checking at t=0 would fault
+  # every normal cycle.
+  prove_after_s: 60
