@@ -153,11 +153,12 @@ voltage with `ioplus 0 adcrd <ch>` and convert in software.
 
 **Probe roles** (map channels → roles in `config.yaml`):
 
-- AD1 **Suction line** — strap to the large, insulated refrigerant line (cold in cooling);
+- AD1 **Output air** — supply air leaving the coil.
+- AD2 **Input air** — return air entering the coil/air handler. Headline metric = air-side
+  ΔT (AD2 − AD1).
+- AD3 **Suction line** — strap to the large, insulated refrigerant line (cold in cooling);
   with the liquid line it indicates refrigerant-side behavior. Insulate over the sensor.
-- AD2 **Liquid line** — strap to the small, warm refrigerant line (subcooling/charge indicator).
-- AD3 **Input air** — return air entering the coil/air handler.
-- AD4 **Output air** — supply air leaving the coil. Headline metric = air-side ΔT (AD3 − AD4).
+- AD4 **Liquid line** — strap to the small, warm refrigerant line (subcooling/charge indicator).
 
 > **Refrigerant-line note:** clamp the probe tightly to clean copper and cover it with
 > pipe insulation so it reads pipe temperature, not room air. True superheat/subcooling
@@ -172,11 +173,15 @@ Voltage → resistance → temperature (Beta 3950), then the field calibration c
 ```
 R      = 15000 * V / (3.3 - V)
 1/T    = 1/298.15 + (1/3950) * ln(R / 10000)   # kelvin
-true_C = 1.024 * (T - 273.15) - 1.20           # 2-point ice/boil correction
+true_C = gain * (T - 273.15) + offset          # per-channel linear correction
 ```
 
-The full calibration data, the ±1.2 °C gain-error finding, accuracy notes, and the
-paste-ready read one-liners live in **[calibration.md](calibration.md)**.
+Each channel carries its own `gain`/`offset` in `config.yaml` (`channel_calibration`),
+falling back to the shared `1.024 / -1.20` when a channel has none of its own.
+
+The full calibration data, the ±1.2 °C gain-error finding, the per-channel coefficients,
+accuracy notes, and the paste-ready read one-liners live in
+**[calibration.md](calibration.md)**.
 
 Quick read of one channel:
 
