@@ -181,6 +181,42 @@ def test_a_thermostat_without_hvac_action_is_reported_distinctly():
     assert src.demand(cfg, 100.0) is None
 
 
+def test_demand_for_times_the_call_from_when_the_action_started():
+    cfg = _cfg()
+    src = ha.HaSource()
+    src.poll(cfg, now=100.0, opener=_opener(COOLING))
+
+    assert src.demand_for(cfg, 100.0) == 0.0
+    assert src.demand_for(cfg, 130.0) == 30.0
+
+
+def test_demand_for_restarts_the_clock_on_a_changeover():
+    """The develop/spin-up windows must not count time from the previous call."""
+    cfg = _cfg()
+    src = ha.HaSource()
+    src.poll(cfg, now=100.0, opener=_opener(COOLING))
+
+    heating = json.loads(json.dumps(COOLING))
+    heating["attributes"]["hvac_action"] = "heating"
+    src.poll(cfg, now=400.0, opener=_opener(heating))
+
+    assert src.demand_for(cfg, 410.0) == 10.0   # not 310
+
+
+def test_demand_for_is_none_when_the_reading_has_gone_stale():
+    """No vouched-for demand means no clock — the timed checks must skip, and a
+    0.0 would read as "the call just started" instead."""
+    cfg = _cfg(stale_after_s=60)
+    src = ha.HaSource()
+    src.poll(cfg, now=100.0, opener=_opener(COOLING))
+
+    assert src.demand_for(cfg, 500.0) is None
+
+
+def test_demand_for_is_none_before_any_successful_poll():
+    assert ha.HaSource().demand_for(_cfg(), 100.0) is None
+
+
 def test_changeover_is_unsettled_until_the_delay_elapses():
     cfg = _cfg(changeover_settle_s=180)
     src = ha.HaSource()

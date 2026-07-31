@@ -34,6 +34,8 @@ def poll_once(state: AppState, backend: HatBackend) -> None:
         state.config,
         demand=state.ha.demand(state.config, now),
         demand_settled=state.ha.settled(state.config, now),
+        fan_mode=state.ha.reading.fan_mode,
+        demand_for_s=state.ha.demand_for(state.config, now),
     )
     state.update(readings, derived, now)
 

@@ -86,6 +86,13 @@ class DeltaTThresholds:
     heating_min_f: float = 25.0
     heating_max_f: float = 70.0
     status_deadband_f: float = 5.0   # |ΔT|>this (fan on) => Cooling/Heating, else Fan
+    # "Is it actually conditioning?" — after develop_after_s of a continuous call,
+    # ΔT must have moved this far in the demanded direction or the system is
+    # running without delivering (delta_t_not_developing). Signed: cooling is a
+    # floor on a positive ΔT, heating a ceiling on a negative one.
+    cooling_develop_f: float = 10.0
+    heating_develop_f: float = -20.0
+    develop_after_s: float = 120.0
 
 
 @dataclass
@@ -137,14 +144,20 @@ class HomeAssistant:
 
 @dataclass
 class Airflow:
-    """Sail-switch airflow proof.
+    """Airflow proof from the OPTO-5 pressure switch.
 
-    Disabled 2026-07-28: the switch was removed pending a replacement sensor.
-    The logic and its tests are retained so bringing it back is a config flag
-    plus wiring, not a rewrite. OPTO-5 is unwired but reserved.
+    Removed 2026-07-28 (sail switch) and restored 2026-07-31 as a diaphragm
+    pressure switch on the same input, so the logic and its tests came back
+    unchanged — the point of having gated it rather than deleted it.
+
+    ``prove_after_s`` is the blower spin-up grace: a furnace deliberately delays
+    the blower 30-90 s after a call while the heat exchanger warms, so checking
+    for airflow the instant a call starts would fault every normal cycle. Timed
+    from the last ``hvac_action`` change, not from process start.
     """
 
-    enabled: bool = False
+    enabled: bool = True
+    prove_after_s: float = 60.0
 
 
 @dataclass
@@ -173,11 +186,17 @@ class Watchdog:
 class RelaySelftest:
     """Relay↔opto loopback test / relay-activity stress test. When enabled the
     poller toggles ``relay_channel`` every ``interval_s`` and confirms the wired
-    ``opto_channel`` follows (relay closed → opto reads closed). Off by default."""
+    ``opto_channel`` follows (relay closed → opto reads closed). Off by default.
+
+    ``opto_channel`` must be a SPARE input. It defaulted to 5 while that input was
+    unused; OPTO-5 now carries the airflow pressure switch, and pointing the
+    loopback at it would read the switch and report failures that aren't there.
+    An existing ``/data/config.yaml`` keeps whatever it was seeded with — check it
+    before enabling the self-test on a deployed unit."""
 
     enabled: bool = False
     relay_channel: int = 5
-    opto_channel: int = 5
+    opto_channel: int = 8
     interval_s: float = 15.0
 
 
@@ -268,6 +287,15 @@ def from_dict(data: dict[str, Any]) -> Config:
                 heating_min_f=float(thresh.get("heating_min_f", 25.0)),
                 heating_max_f=float(thresh.get("heating_max_f", 70.0)),
                 status_deadband_f=float(thresh.get("status_deadband_f", 5.0)),
+                cooling_develop_f=float(
+                    thresh.get("cooling_develop_f", DeltaTThresholds.cooling_develop_f)
+                ),
+                heating_develop_f=float(
+                    thresh.get("heating_develop_f", DeltaTThresholds.heating_develop_f)
+                ),
+                develop_after_s=float(
+                    thresh.get("develop_after_s", DeltaTThresholds.develop_after_s)
+                ),
             )
         ),
         display=Display(
@@ -297,7 +325,10 @@ def from_dict(data: dict[str, Any]) -> Config:
                 hass.get("changeover_settle_s", HomeAssistant.changeover_settle_s)
             ),
         ),
-        airflow=Airflow(enabled=bool(airflow.get("enabled", Airflow.enabled))),
+        airflow=Airflow(
+            enabled=bool(airflow.get("enabled", Airflow.enabled)),
+            prove_after_s=float(airflow.get("prove_after_s", Airflow.prove_after_s)),
+        ),
         web=Web(host=str(web.get("host", "0.0.0.0")), port=int(web.get("port", 8000))),
         watchdog=Watchdog(
             enabled=bool(wd.get("enabled", False)),
@@ -371,6 +402,18 @@ def validate(cfg: Config) -> None:
     fan_ch = cfg.digital.fan.opto_channel
     if not (1 <= fan_ch <= NUM_OPTO_CHANNELS):
         raise ConfigError(f"digital.fan.opto_channel must be 1..{NUM_OPTO_CHANNELS}")
+
+    # The develop thresholds are signed, and a sign error would invert the check
+    # silently — a system delivering nothing would read as healthy.
+    dt = cfg.thresholds.delta_t
+    if dt.cooling_develop_f <= 0:
+        raise ConfigError("thresholds.delta_t.cooling_develop_f must be > 0 (cooling ΔT is positive)")
+    if dt.heating_develop_f >= 0:
+        raise ConfigError("thresholds.delta_t.heating_develop_f must be < 0 (heating ΔT is negative)")
+    if dt.develop_after_s <= 0:
+        raise ConfigError("thresholds.delta_t.develop_after_s must be > 0")
+    if cfg.airflow.prove_after_s < 0:
+        raise ConfigError("airflow.prove_after_s must be >= 0")
 
     if not (1 <= cfg.display.slot <= 6):
         raise ConfigError("display.slot must be 1..6")

@@ -26,7 +26,7 @@ ac_monitor/
 │   ├── liquid_line              #        (refrigerant liquid line)
 │   ├── input_air                #        (return air into the coil)
 │   └── output_air               #        (supply air out of the coil)
-├── airflow                      # "ON"/"OFF" (sail switch)
+├── airflow                      # "ON"/"OFF" (OPTO-5 pressure switch)
 └── derived/
     ├── delta_t                  # air-side ΔT = input_air - output_air
     └── fault/<name>             # "ON"/"OFF" per fault (no_airflow, abnormal_delta_t, ...)
@@ -43,8 +43,17 @@ ac_monitor/
 | Air ΔT | sensor | `derived/delta_t` | `temperature` (Δ) |
 | Airflow | binary_sensor | `airflow` | `running` / `moving` |
 | No-Airflow Fault | binary_sensor | `derived/fault/no_airflow` | `problem` |
+| Airflow Mismatch | binary_sensor | `derived/fault/airflow_mismatch` | `problem` |
 | Abnormal ΔT | binary_sensor | `derived/fault/abnormal_delta_t` | `problem` |
+| ΔT Not Developing | binary_sensor | `derived/fault/delta_t_not_developing` | `problem` |
+| Wrong Direction | binary_sensor | `derived/fault/wrong_direction` | `problem` |
+| Home Assistant Unavailable | binary_sensor | `derived/fault/ha_unavailable` | `problem` |
 | Sensor Fault | binary_sensor | `derived/fault/sensor_fault` | `problem` |
+
+**Airflow Mismatch** and **ΔT Not Developing** are the two worth an actual
+notification: both mean the equipment is running and not delivering, and both
+also drive `system_status` to `Error` on the dashboard. See
+[ha-mode-source.md](ha-mode-source.md#faults).
 
 *(Thermostat call binary sensors — Heat/Cool/Fan — get added when that phase lands.)*
 

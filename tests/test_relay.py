@@ -111,7 +111,11 @@ def test_persistent_error_surfaces_detail():
 def test_config_defaults_off():
     cfg = cfgmod.from_dict({})
     assert cfg.relay_selftest.enabled is False
-    assert cfg.relay_selftest.relay_channel == 5 and cfg.relay_selftest.opto_channel == 5
+    assert cfg.relay_selftest.relay_channel == 5
+    # A SPARE input: OPTO-5 carries the airflow pressure switch, and looping the
+    # relay test onto it would read the switch and report failures that aren't real.
+    assert cfg.relay_selftest.opto_channel == 8
+    assert cfg.relay_selftest.opto_channel != cfg.digital.fan.opto_channel
 
 
 def test_config_roundtrip():

@@ -7,6 +7,12 @@
 **Scope change 2026-07-28:** the **sail switch is being removed** pending a
 replacement sensor. See *Running without airflow proof* — it has real
 consequences for the fallback.
+**Resolved 2026-07-31:** airflow proof is **back** — a diaphragm pressure switch
+on the same OPTO-5 input, `airflow.enabled: true`. Everything *Running without
+airflow proof* describes as lost is restored, and the two checks this document
+deferred for want of a sensor now ship: `airflow_mismatch` and the new
+`delta_t_not_developing` (issue #64). Gating the logic rather than deleting it
+paid off exactly as intended: a config flag plus wiring, no rewrite.
 
 Today `system_status` is *inferred* from the sail switch plus the sign of air-side
 ΔT. This replaces the inference with the thermostat's own reported action, read
@@ -42,9 +48,14 @@ better label, but a class of fault becoming detectable at all.
 |---|---|---|---|
 | **Demand** | HA `climate.home` → `hvac_action` | what is it being *told* to do? | ✅ |
 | **Achieved** | thermistors → ΔT | is it *working*? | ✅ |
-| **Actual** | sail switch on OPTO-5 | is air *actually* moving? | ⛔ **removed, pending a replacement sensor** |
+| **Actual** | pressure switch on OPTO-5 | is air *actually* moving? | ✅ *(restored 2026-07-31)* |
 
 ## Running without airflow proof
+
+> **Historical (2026-07-28 → 07-31).** Kept because the reasoning is what made
+> the restoration cheap, and because the *fallback* consequence below is still
+> live whenever the sensor is unavailable. A pressure switch now provides airflow
+> proof; `airflow.enabled` defaults to true.
 
 The sail switch is being removed for now. This is a deliberate, temporary
 trade — recorded here so the cost is visible rather than discovered later.
@@ -193,11 +204,32 @@ its band from **demand** rather than from the sign of ΔT.
 | Fault | Condition | Note |
 |---|---|---|
 | `sensor_fault` | any channel unreadable | unchanged |
-| `no_airflow` | ~~sail switch open past debounce~~ | ⛔ **disabled** — no airflow sensor |
-| `abnormal_delta_t` | ΔT outside the band **for the demanded mode** | no longer circular; **gated on demand**, since `fan_running` is gone |
-| **`airflow_mismatch`** | ~~airflow demanded and sail switch open~~ | ⛔ **deferred** — needs an airflow sensor |
+| `no_airflow` | airflow switch open past debounce | ✅ live again (2026-07-31) |
+| `abnormal_delta_t` | ΔT outside the band **for the demanded mode** | no longer circular; **gated on demand** |
+| **`airflow_mismatch`** | airflow demanded and the switch reads open, past `airflow.prove_after_s` | ✅ shipped (#64) |
+| **`delta_t_not_developing`** | heat/cool call has run `develop_after_s` and ΔT never reached the develop threshold | ✅ shipped (#64) |
 | **`wrong_direction`** | demand cooling but ΔT heating, or vice versa | only detectable with authoritative demand |
 | **`ha_unavailable`** | HA enabled but unreachable or stale | degraded, not broken |
+
+The last two rows of the "shipped" block are the only faults that also change
+`system_status` — to `"Error"`. They mean *the equipment is running and failing
+to do its job*, which no other fault means, and a panel reading a confident
+"Cooling" over a system cooling nothing is the failure mode worth shouting about.
+`mode`, `mode_source` and the HA block in `/api/state` are untouched by the
+escalation: the thermostat's reported action still reads exactly as it does now.
+
+**`delta_t_not_developing` thresholds** (commissioned 2026-07-31, all
+configurable under `thresholds.delta_t`):
+
+| Demand | ΔT must reach | Window |
+|---|---|---|
+| `cooling` | ≥ **+10 °F** | 120 s of continuous call |
+| `heating` | ≤ **−20 °F** | 120 s of continuous call |
+
+Both windows — and `airflow.prove_after_s` — are measured from the last
+`hvac_action` change, i.e. from the same `action_since` that drives
+`changeover_settle_s`. A heat pump reversing therefore restarts both clocks for
+free, and neither check needs its own state.
 
 **When the airflow sensor returns**, "airflow demanded" is not the same as
 "heating or cooling." With `fan_modes: ["on", "auto"]` the blower can be forced
@@ -260,7 +292,8 @@ with our own measurements — that combination is what this appliance contribute
 One real consequence of removing the sail switch: the `airflow` binary sensor
 stops publishing, because `fan_running` is None. The discovery entity remains and
 simply goes stale in HA. Acceptable while the sensor is out; delete the entity if
-it becomes confusing.
+it becomes confusing. *(Moot since 2026-07-31 — it publishes again. Still the
+behaviour to expect if the opto read starts failing.)*
 
 ---
 
@@ -295,9 +328,16 @@ homeassistant:
   changeover_settle_s: 180                # suppress wrong_direction after a change
 
 airflow:
-  enabled: false                          # no sensor fitted; OPTO-5 unwired.
-                                          # Flip to true when one is back — the
-                                          # logic and its tests are retained.
+  enabled: true                           # OPTO-5 diaphragm pressure switch
+  prove_after_s: 60                       # blower spin-up grace before
+                                          # airflow_mismatch (furnaces delay the
+                                          # blower 30-90 s deliberately)
+
+thresholds:
+  delta_t:
+    cooling_develop_f: 10                 # ΔT must reach at least this on cool
+    heating_develop_f: -20                # ...and at most this on heat
+    develop_after_s: 120                  # before either is judged
 ```
 
 **`token` is a secret.** It must be redacted by `GET /api/config` (#43) and must
@@ -351,7 +391,10 @@ injected opener. Cases that matter —
 *(Resolved 2026-07-28: yes, `climate.home` exposes `fan_mode` separately — folded
 into the `airflow_mismatch` condition above.)*
 
-- Should `airflow_mismatch` alert immediately or after N consecutive polls? A
-  blower takes a few seconds to spin up after a call starts.
+*(Resolved 2026-07-31: `airflow_mismatch` waits `airflow.prove_after_s` — 60 s by
+default — measured from the last `hvac_action` change rather than counting polls.
+A furnace delays its own blower 30-90 s while the heat exchanger warms, so
+alerting immediately would fault every normal cycle.)*
+
 - If HA is unavailable for a long period, should `ha_unavailable` escalate, or
   stay a quiet degraded state? It is not an HVAC fault.
