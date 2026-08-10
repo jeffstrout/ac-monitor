@@ -107,7 +107,9 @@ class Display:
     changed."""
 
     enabled: bool = True
-    base_url: str = "http://192.168.0.17:8080"
+    # The display serves on port 80 (jeffstrout/split-flap#90). It was :8080
+    # until 2026-08-10; a stale value here silently stops the push.
+    base_url: str = "http://192.168.0.17"
     slot: int = 2                # POST /api/screens/<slot>
     refresh_s: int = 30
 

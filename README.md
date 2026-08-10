@@ -71,6 +71,19 @@ Exit status is 0 only if everything passed.
 Calibration writes are behind `--calibration` and off by default: a reset
 discards capture points that cannot be reconstructed from the API.
 
+> **A deployed box does not pick up changed defaults.** Settings live in
+> `/data/config.yaml` on the `ac-monitor-data` volume, and a value present there
+> wins over the dataclass default in `ac_monitor/config.py`. So changing a
+> default in this repo only affects *fresh* installs — an existing appliance
+> keeps whatever it persisted until you edit that file and restart. This is how
+> the split-flap push kept pointing at a dead `:8080` after the display moved to
+> port 80:
+>
+> ```bash
+> sudo docker exec ac-monitor python -c "import pathlib;p=pathlib.Path('/data/config.yaml');s=p.read_text();p.write_text(s.replace('OLD','NEW'))"
+> cd ~/ac-monitor/deploy && sudo docker compose restart ac-monitor
+> ```
+
 ## Target platform
 
 - Raspberry Pi 3B+, Raspberry Pi OS (64-bit, Bookworm or newer)
