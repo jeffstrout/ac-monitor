@@ -57,8 +57,8 @@ in the `ac-monitor-data` volume (`/data/config.yaml`) and survive updates; on
 first run a default `config.yaml` (the as-wired mapping) is seeded — edit it from
 the web control panel.
 
-Browse to **http://<pi-ip>:8000** for the dashboard/control panel, and confirm
-the running build with `curl http://<pi-ip>:8000/api/version`.
+Browse to **http://<pi-ip>** for the dashboard/control panel, and confirm
+the running build with `curl http://<pi-ip>/api/version`.
 
 ## 4. Make the GHCR image public (first time only)
 

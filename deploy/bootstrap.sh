@@ -89,10 +89,10 @@ say "Verifying"
 sleep 6
 IP="$(hostname -I | awk '{print $1}')"
 echo "GET /api/version:"
-curl -s "http://127.0.0.1:8000/api/version" \
+curl -s "http://127.0.0.1/api/version" \
   || echo "(not answering yet — try: cd $DIR/deploy && sudo docker compose logs ac-monitor)"
 echo
 say "Done"
-echo "Dashboard: http://${IP}:8000"
+echo "Dashboard: http://${IP}"
 echo "Logs:      cd $DIR/deploy && sudo docker compose logs -f ac-monitor"
 echo "Updates:   merge to main -> Watchtower rolls it out (~20 min)"

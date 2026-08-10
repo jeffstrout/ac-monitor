@@ -60,7 +60,7 @@ The unit tests run against a fake HAT backend. To check the **running** box —
 real I²C, real config file, real persistence — run the smoke test against it:
 
 ```bash
-python3 deploy/smoke-test.py http://192.168.0.69:8000
+python3 deploy/smoke-test.py http://192.168.0.69
 ```
 
 Standard library only, so it works on the Pi with nothing installed. It reads

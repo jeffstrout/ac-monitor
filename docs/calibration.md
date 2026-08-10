@@ -143,7 +143,7 @@ accessible, an ice-bath capture supersedes this.
 To undo it and fall back to the shared correction:
 
 ```bash
-curl -s -X POST http://192.168.0.69:8000/api/calibrate/reset -H 'Content-Type: application/json' -d '{"role":"output_air"}'
+curl -s -X POST http://192.168.0.69/api/calibrate/reset -H 'Content-Type: application/json' -d '{"role":"output_air"}'
 ```
 
 ## Reading the sensors

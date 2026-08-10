@@ -77,6 +77,9 @@ mqtt:
   discovery_prefix: "homeassistant"
   retain: true
 
+# The port the app listens on INSIDE the container. This is not the port you
+# browse to: deploy/docker-compose.yml publishes it on host port 80, so the
+# dashboard is http://<pi-ip> with no port. Change the host side there, not here.
 web:
   host: "0.0.0.0"
   port: 8000
