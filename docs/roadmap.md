@@ -40,7 +40,7 @@ independently useful and testable.
 
 ## Phase 4 — Web dashboard
 - FastAPI `/api/state` + a single-page live dashboard (temps, ΔT, ΔP, airflow, faults).
-- Deliverable: browse to `http://<pi>:8000` and watch live readings.
+- Deliverable: browse to `http://<pi>` and watch live readings.
 
 ## Phase 5 — Productionize
 - Deploy via Docker on the Pi (`deploy/docker-compose.yml`); confirm Watchtower

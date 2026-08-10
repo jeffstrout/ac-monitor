@@ -168,6 +168,9 @@ class Poll:
 
 @dataclass
 class Web:
+    """In-container listen address. The host-side port is set by the compose
+    publish (`HOST_PORT`, default 80), not here."""
+
     host: str = "0.0.0.0"
     port: int = 8000
 

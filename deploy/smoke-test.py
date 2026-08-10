@@ -7,8 +7,8 @@ that has never been checked automatically.
 
 Run it on the Pi, or against any reachable instance:
 
-    python3 deploy/smoke-test.py                      # http://localhost:8080
-    python3 deploy/smoke-test.py http://192.168.0.42:8080
+    python3 deploy/smoke-test.py                      # http://localhost
+    python3 deploy/smoke-test.py http://192.168.0.42
 
 Standard library only, so it runs on the Pi with nothing installed.
 
@@ -84,7 +84,7 @@ def section(title: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("base", nargs="?", default="http://localhost:8080", help="appliance base URL")
+    ap.add_argument("base", nargs="?", default="http://localhost", help="appliance base URL")
     ap.add_argument(
         "--calibration",
         action="store_true",
