@@ -91,3 +91,4 @@ with no further wiring. See the [roadmap](roadmap.md).
 | Watchtower logs "client version 1.25 is too old" | Ensure `DOCKER_API_VERSION` is set on the watchtower service (it is, default 1.40) |
 | `/api/version` shows the new build but behavior is unchanged | A browser tab may be caching the old dashboard — reload it |
 | CI shows no image published | Expected until `ac_monitor/__main__.py` exists (build is guarded) |
+| Pi stops answering ping/SSH (ARP "Host is down") while the container is still running | Wi-Fi wedge — Watchtower cannot help until the host is reachable. Install [host hardening](../deploy/host/README.md) from a checkout (`sudo ./deploy/host/install-host-hardening.sh`); it is **not** rolled out by the image |

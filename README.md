@@ -50,6 +50,7 @@ and [docs/i2c-lockup.md](docs/i2c-lockup.md).
 - **[Software design](docs/software-design.md)** — architecture, modules, config schema, deployment
 - **[MQTT & Home Assistant](docs/mqtt-homeassistant.md)** — topic tree and auto-discovery spec
 - **[Auto-update](docs/auto-update.md)** — GHCR + Watchtower hands-off deployment
+- **[Pi host hardening](deploy/host/README.md)** — persistent `journald` + gateway watchdog (Wi-Fi-only appliance; not applied by Watchtower)
 - **[Roadmap](docs/roadmap.md)** — phased implementation plan
 - **[Vendor docs](Hardware%20Documentation/)** — Sequent HAT user guide (the Setra 265 and
   Sensirion SDP8xx datasheets are from superseded pressure-sensor designs)
@@ -83,6 +84,22 @@ discards capture points that cannot be reconstructed from the API.
 > sudo docker exec ac-monitor python -c "import pathlib;p=pathlib.Path('/data/config.yaml');s=p.read_text();p.write_text(s.replace('OLD','NEW'))"
 > cd ~/ac-monitor/deploy && sudo docker compose restart ac-monitor
 > ```
+
+### Host hardening (Wi-Fi-only Pi)
+
+This appliance is **Wi-Fi-only** — hardwire Ethernet is not available. If the
+app keeps running but the Pi stops answering ping/SSH (ARP "Host is down"),
+the `brcmfmac` stack has likely wedged. Install persistent `journald` + a
+gateway reboot watchdog from a checkout (Watchtower does **not** apply host
+units):
+
+```bash
+sudo ./deploy/host/install-host-hardening.sh
+```
+
+See [deploy/host/README.md](deploy/host/README.md) and
+[PI-SETUP.md](PI-SETUP.md#6-host-hardening-wi-fi-reliability). That host
+watchdog is unrelated to the optional HAT I²C petter in `ac_monitor/watchdog.py`.
 
 ## Target platform
 
