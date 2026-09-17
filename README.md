@@ -12,6 +12,22 @@ everything to **Home Assistant** over MQTT.
 > [issues](https://github.com/jeffstrout/ac-monitor/issues); the longer-range
 > roadmap is in [docs/roadmap.md](docs/roadmap.md).
 
+**Live LAN (after the 2026-09-16 Wi-Fi cleanup):** this appliance is
+**http://acmonitor.strout.us** (`192.168.0.69`), host port 80. Fleet map:
+
+| IP | Name | Notes |
+|---|---|---|
+| `192.168.0.13` | `adsb.strout.us` | **not** `.16`; **not** FlightAware primary |
+| `192.168.0.17` | `splitflap.strout.us` | display push target |
+| `192.168.0.44` | `syslog.strout.us` | |
+| `192.168.0.69` | `acmonitor.strout.us` | this box |
+| `192.168.0.95` | `m2macmini` | |
+| `192.168.0.105` | `homeassistant` | `http://192.168.0.105:8123` |
+| `192.168.0.190` | `nas` | |
+| `192.168.0.247` | `DBServer.strout.us` | **not** `.250`; Helios `http://192.168.0.247:8083` |
+
+Obsolete reservations: `.16`, `.250`, and any doc that still names FlightAware as the ADS-B primary.
+
 ---
 
 ## What it does
@@ -61,7 +77,8 @@ The unit tests run against a fake HAT backend. To check the **running** box —
 real I²C, real config file, real persistence — run the smoke test against it:
 
 ```bash
-python3 deploy/smoke-test.py http://192.168.0.69
+python3 deploy/smoke-test.py http://acmonitor.strout.us
+# equivalent: python3 deploy/smoke-test.py http://192.168.0.69
 ```
 
 Standard library only, so it works on the Pi with nothing installed. It reads

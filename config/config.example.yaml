@@ -61,7 +61,7 @@ thresholds:
 # Split-flap display push (toggle + target set from the web control panel).
 display:
   enabled: true             # push readings to the split-flap (on by default)
-  base_url: "http://192.168.0.17"   # port 80 — the display moved off :8080 (split-flap#90)
+  base_url: "http://192.168.0.17"   # splitflap.strout.us, port 80 (moved off :8080, split-flap#90)
   slot: 2                   # POST /api/screens/<slot>
   refresh_s: 30
 
@@ -69,7 +69,7 @@ display:
 # web control panel and persisted here; `enabled` toggles publishing at runtime.
 mqtt:
   enabled: false
-  host: "192.168.1.10"
+  host: "192.168.1.10"      # placeholder, not a 192.168.0.0/24 reservation
   port: 1883
   username: ""
   password: ""
@@ -79,7 +79,8 @@ mqtt:
 
 # The port the app listens on INSIDE the container. This is not the port you
 # browse to: deploy/docker-compose.yml publishes it on host port 80, so the
-# dashboard is http://<pi-ip> with no port. Change the host side there, not here.
+# dashboard is http://acmonitor.strout.us (192.168.0.69) with no port.
+# Change the host side there, not here.
 web:
   host: "0.0.0.0"
   port: 8000
@@ -112,7 +113,7 @@ relay_selftest:
 # while nothing was running.
 homeassistant:
   enabled: false
-  base_url: "http://192.168.0.105:8123"
+  base_url: "http://192.168.0.105:8123"  # homeassistant on the LAN (not .250)
   token: ""                  # long-lived access token — SECRET, never logged
   entity_id: "climate.home"
   timeout_s: 3               # must not stall the poll loop

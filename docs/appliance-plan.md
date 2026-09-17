@@ -121,8 +121,8 @@ first merge.
 Single page served by FastAPI:
 
 - **Live readings** — 4 temps, ΔT, fan status, per-channel health, I²C status.
-- **Toggle — display push → slot 2** at `192.168.0.17` (`POST /api/screens/2`). On/off,
-  persisted.
+- **Toggle — display push → slot 2** at `splitflap.strout.us` (`192.168.0.17`,
+  `POST /api/screens/2`). On/off, persisted.
 - **Toggle — MQTT output** on/off, persisted.
 - **Calibration editor — per-channel gain/offset with capture helpers.** For each of AD1–AD4:
   editable `gain`/`offset`, plus **"Capture in ice (0 °C)"** and **"Capture at boiling
