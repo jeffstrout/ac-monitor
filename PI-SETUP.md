@@ -73,10 +73,45 @@ Watchtower (in the compose file) polls GHCR ~every 20 min and recreates the
 container when a newer `:latest` is published — so **merging a PR to `main`
 rolls out to the Pi hands-off**. Verify a rollout landed with `/api/version`.
 
-## 6. HAT hardware watchdog (optional)
+## 6. Host hardening (Wi-Fi reliability)
 
-For unattended reliability, enable the HAT watchdog so a hang auto-recovers via
-power cycle. In the web control panel or `config.yaml`:
+This appliance is **Wi-Fi-only** (hardwire Ethernet is not available). Pis that
+run Wi-Fi only can wedge the `brcmfmac` stack so ping/SSH fail (ARP shows
+"Host is down") while Docker and the app keep running. Install persistent
+journals plus a gateway reboot watchdog from this repo — that is the recovery
+path:
+
+```bash
+cd ~/ac-monitor
+git pull
+sudo ./deploy/host/install-host-hardening.sh
+```
+
+Watchtower does **not** apply this. Host units live on the Pi, not in the
+container image; run the install script from a checkout after merge (and again
+if the units change). The script is idempotent.
+
+Details and verify commands: [deploy/host/README.md](deploy/host/README.md).
+
+Quick checks:
+
+```bash
+systemctl status gateway-watchdog.timer
+cat /var/lib/gateway-watchdog/fail_count          # 0 when the gateway answers
+journalctl --list-boots                          # previous boots after a reboot
+sudo tail /var/log/gateway-watchdog.log          # failures / recovery / reboot
+```
+
+The watchdog pings the default gateway every minute and reboots only after
+**five** consecutive failures (~five minutes), so brief blips do not loop-reboot.
+
+This is separate from the optional HAT I²C watchdog in §7 (`ac_monitor/watchdog.py`).
+
+## 7. HAT hardware watchdog (optional)
+
+For unattended reliability when the *app* hangs, enable the Sequent HAT
+watchdog so a hang auto-recovers via power cycle. In the web control panel or
+`config.yaml`:
 
 ```yaml
 watchdog:
@@ -87,3 +122,12 @@ watchdog:
 ⚠ Verify it actually recovers the I²C **lockup** on your hardware before relying
 on it — see [docs/i2c-lockup.md](docs/i2c-lockup.md). (If lockups persist, a
 Pi 5 — different I²C silicon — likely eliminates them at the source.)
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Dashboard / SSH unreachable; ARP "Host is down"; Docker still running if you can see the box locally | Wi-Fi stack likely wedged — power-cycle; then install [host hardening](deploy/host/README.md) so the gateway watchdog reboots after ~5 minutes of lost gateway |
+| Device didn't auto-update | Check `docker compose logs watchtower`; force with `docker compose pull && docker compose up -d`; confirm `/api/version` |
+| `docker: permission denied` | You skipped the log-out/in after `usermod -aG docker` |
+| Page unreachable from another device but the Pi is up | Use the Pi's IP; check `docker compose ps` shows `Up` |

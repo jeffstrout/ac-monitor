@@ -1,0 +1,9 @@
+[Unit]
+Description=Ping default gateway; reboot after sustained failure
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gateway-watchdog.sh
+Nice=10
