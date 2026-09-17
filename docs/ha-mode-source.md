@@ -1,7 +1,7 @@
 # Taking system mode from Home Assistant
 
 **Status:** design, nothing implemented.
-**Entity:** `climate.home` on Home Assistant at `192.168.0.105:8123`.
+**Entity:** `climate.home` on Home Assistant at `homeassistant` (`192.168.0.105:8123`).
 **Confirmed 2026-07-28:** the entity reports `hvac_action`. Design is valid; see
 *Confirmed payload* below for what the real response changed.
 **Scope change 2026-07-28:** the **sail switch is being removed** pending a
@@ -104,6 +104,7 @@ not read as "Cooling".
 ⚠️ **Not every thermostat reports `hvac_action`.** Confirm first:
 
 ```bash
+# homeassistant on the LAN (192.168.0.105 — not .250)
 curl -s -H "Authorization: Bearer $HA_TOKEN" \
   http://192.168.0.105:8123/api/states/climate.home | python3 -m json.tool
 ```
@@ -320,7 +321,7 @@ Rejected for now:
 ```yaml
 homeassistant:
   enabled: false                          # off unless configured, like mqtt
-  base_url: "http://192.168.0.105:8123"
+  base_url: "http://192.168.0.105:8123"  # homeassistant; LAN reservation, not .250
   token: ""                               # long-lived access token
   entity_id: "climate.home"
   timeout_s: 3                            # must not stall the poll loop

@@ -8,7 +8,8 @@ that has never been checked automatically.
 Run it on the Pi, or against any reachable instance:
 
     python3 deploy/smoke-test.py                      # http://localhost
-    python3 deploy/smoke-test.py http://192.168.0.42
+    python3 deploy/smoke-test.py http://acmonitor.strout.us
+    python3 deploy/smoke-test.py http://192.168.0.69
 
 Standard library only, so it runs on the Pi with nothing installed.
 
