@@ -38,7 +38,9 @@ Obsolete reservations: `.16`, `.250`, and any doc that still names FlightAware a
 - **"Running but not delivering" faults** — the thermostat calls, and either the blower
   never turns or ΔT never develops; both escalate the status to **Error**
 - **Web dashboard** — live readings in the browser
-- **Home Assistant** — auto-discovered sensors & binary sensors via MQTT
+- **Home Assistant** — auto-discovered sensors & binary sensors via MQTT, with a
+  self-healing LWT/availability (stable client id, periodic + HA-birth re-announce;
+  connection state in `/api/state`)
 - **Hands-off updates** — merge a PR and the Pi self-updates via GHCR + Watchtower ([details](docs/auto-update.md))
 
 Planned for a later phase: reading the thermostat's call-for-heat / call-for-cool / fan
