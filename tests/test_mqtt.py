@@ -56,6 +56,10 @@ class FakeClient:
         self.host = None
         self.loop = False
         self.on_connect = None
+        self.on_disconnect = None
+        self.on_message = None
+        self.subscribed = []
+        self.client_id = None
 
     def simulate_reconnect(self):
         """Fire the on_connect callback the way paho does after it reconnects.
@@ -74,6 +78,20 @@ class FakeClient:
 
     def connect(self, h, port):
         self.host = (h, port)
+        # Real paho delivers CONNACK on the network thread; fire it inline.
+        if self.on_connect is not None:
+            self.on_connect(self, None, {}, 0)
+
+    def subscribe(self, t):
+        self.subscribed.append(t)
+
+    def simulate_disconnect(self):
+        self.on_disconnect(self, None, 1)
+
+    def deliver(self, topic, payload):
+        """Simulate the broker delivering a message we subscribed to."""
+        msg = type("Msg", (), {"topic": topic, "payload": payload.encode()})()
+        self.on_message(self, None, msg)
 
     def loop_start(self):
         self.loop = True
@@ -90,7 +108,7 @@ class FakeClient:
 
 def test_publisher_connects_and_publishes():
     st, fake = _state(enabled=True), FakeClient()
-    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
     pub.sync(st)
     assert pub.connected is True
     assert fake.will == ("ac_monitor/status", "offline", True)          # LWT
@@ -101,7 +119,7 @@ def test_publisher_connects_and_publishes():
 
 def test_publisher_no_connect_when_disabled():
     fake = FakeClient()
-    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
     pub.sync(_state(enabled=False))
     assert pub.connected is False and fake.host is None
 
@@ -113,14 +131,14 @@ def test_publisher_no_connect_without_host():
     st.config.mqtt.enabled = True
     st.config.mqtt.host = ""
     fake = FakeClient()
-    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
     pub.sync(st)
     assert pub.connected is False and fake.host is None
 
 
 def test_publisher_disconnects_on_toggle_off():
     st, fake = _state(enabled=True), FakeClient()
-    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
     pub.sync(st)
     assert pub.connected
     st.config.mqtt.enabled = False
@@ -131,7 +149,7 @@ def test_publisher_disconnects_on_toggle_off():
 
 def test_discovery_published_once():
     st, fake = _state(), FakeClient()
-    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
     pub.sync(st)
     n1 = sum(1 for t, _, _ in fake.published if t.endswith("/config"))
     pub.sync(st)
@@ -147,7 +165,7 @@ def test_reconnect_republishes_online():
     to a device Home Assistant believes is unavailable.
     """
     st, fake = _state(), FakeClient()
-    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
     pub.sync(st)
     fake.published.clear()
 
@@ -159,7 +177,7 @@ def test_reconnect_republishes_online():
 def test_reconnect_resends_discovery():
     """A broker that came back without its retained store has forgotten us."""
     st, fake = _state(), FakeClient()
-    pub = mqtt_out.MqttPublisher(client_factory=lambda: fake)
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
     pub.sync(st)
     fake.published.clear()
 
@@ -167,3 +185,102 @@ def test_reconnect_resends_discovery():
     pub.sync(st)
 
     assert any(t.endswith("/config") for t, _, _ in fake.published)
+
+
+# --- #73: stale LWT / HA birth / stable client id / connection state ---------
+
+def test_stale_lwt_after_announce_triggers_reannounce():
+    """A pre-reboot session's retained LWT 'offline' landing after our 'online'
+    must be corrected immediately, not left stuck (#73)."""
+    st, fake = _state(), FakeClient()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
+    pub.sync(st)
+    assert "ac_monitor/status" in fake.subscribed
+    fake.published.clear()
+
+    fake.deliver("ac_monitor/status", "offline")   # stale will from the old session
+
+    assert ("ac_monitor/status", "online", True) in fake.published
+
+
+def test_own_online_echo_does_not_loop():
+    st, fake = _state(), FakeClient()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
+    pub.sync(st)
+    fake.published.clear()
+    fake.deliver("ac_monitor/status", "online")
+    assert fake.published == []
+
+
+def test_ha_birth_reannounces_and_resends_discovery():
+    st, fake = _state(), FakeClient()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
+    pub.sync(st)
+    assert "homeassistant/status" in fake.subscribed
+    fake.published.clear()
+
+    fake.deliver("homeassistant/status", "online")
+    assert ("ac_monitor/status", "online", True) in fake.published
+    pub.sync(st)
+    assert any(t.endswith("/config") for t, _, _ in fake.published)
+
+
+def test_client_id_stable_and_configurable(monkeypatch):
+    monkeypatch.setattr(mqtt_out.socket, "gethostname", lambda: "acpi")
+    seen = []
+
+    def factory(cid):
+        seen.append(cid)
+        return FakeClient()
+
+    for _ in range(2):  # two "boots"
+        mqtt_out.MqttPublisher(client_factory=factory).sync(_state())
+    assert seen == ["ac-monitor-acpi", "ac-monitor-acpi"]
+
+    st = _state()
+    st.config.mqtt.client_id = "custom-id"
+    mqtt_out.MqttPublisher(client_factory=factory).sync(st)
+    assert seen[-1] == "custom-id"
+
+
+def test_periodic_reannounce():
+    now = [1000.0]
+    st, fake = _state(), FakeClient()
+    st.config.mqtt.announce_interval_s = 300
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake, clock=lambda: now[0])
+    pub.sync(st)
+    fake.published.clear()
+
+    now[0] += 100
+    pub.sync(st)
+    assert ("ac_monitor/status", "online", True) not in fake.published
+    now[0] += 250
+    pub.sync(st)
+    assert ("ac_monitor/status", "online", True) in fake.published
+
+
+def test_connected_tracks_callbacks_and_is_exposed():
+    st, fake = _state(), FakeClient()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
+    pub.sync(st)
+    snap = st.snapshot()["mqtt"]
+    assert snap["connected"] is True and snap["client_id"].startswith("ac-monitor-")
+    assert "password" not in snap
+
+    fake.simulate_disconnect()
+    fake.published.clear()
+    pub.sync(st)
+    assert st.snapshot()["mqtt"]["connected"] is False
+    assert fake.published == []          # nothing queued while down
+
+    fake.simulate_reconnect()
+    assert pub.connected is True
+
+
+def test_connack_refused_not_connected():
+    st, fake = _state(), FakeClient()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda _cid: fake)
+    fake.connect = lambda h, p: fake.on_connect(fake, None, {}, 5)   # not authorised
+    pub.sync(st)
+    assert pub.connected is False
+    assert st.snapshot()["mqtt"]["connected"] is False

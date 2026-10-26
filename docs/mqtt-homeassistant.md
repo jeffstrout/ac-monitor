@@ -12,6 +12,20 @@ The service publishes all readings to MQTT and registers itself with Home Assist
 - **Availability (LWT):** the MQTT client sets a Last Will on
   `ac_monitor/status` = `offline`; on connect it publishes `online`. Every entity
   references this topic so HA shows the whole device as unavailable if the Pi drops.
+- **Availability is self-healing (#73).** Retained `online` is re-published:
+  - on every (re)connect (`on_connect`),
+  - every `mqtt.announce_interval_s` (default 300 s) while connected,
+  - when Home Assistant announces itself on `homeassistant/status` = `online`
+    (discovery is re-sent too),
+  - when we see our own `ac_monitor/status` flip to `offline` while connected
+    (a stale LWT from a previous session).
+- **Stable client id.** `mqtt.client_id` (default `ac-monitor-<hostname>`). A
+  random per-boot id let a pre-reboot session linger on the broker and fire its
+  retained LWT `offline` ~90 s *after* the new process announced `online`,
+  leaving HA unavailable indefinitely (2026-10-25 incident, #73). With a stable
+  id the broker takes the old session over at CONNECT time.
+- **Connection state** is tracked from `on_connect` / `on_disconnect` and exposed
+  in `GET /api/state` as `mqtt: {enabled, connected, client_id, last_announce_at}`.
 - **Publishing:** a single retained JSON state message plus per-entity state topics
   (JSON is convenient for the dashboard; per-entity topics keep HA discovery simple).
 
@@ -59,7 +73,7 @@ also drive `system_status` to `Error` on the dashboard. See
 
 ## 4. Discovery payload example
 
-Published once at startup (retained) to
+Published at startup and re-sent on reconnect / HA birth (retained) to
 `homeassistant/sensor/ac_monitor/input_air/config`:
 
 ```json

@@ -124,6 +124,12 @@ class Mqtt:
     base_topic: str = "ac_monitor"
     discovery_prefix: str = "homeassistant"
     retain: bool = True
+    # Stable MQTT client id. Empty = "ac-monitor-<hostname>". Must be stable
+    # across reboots so the broker takes over (and expires) the previous
+    # session immediately instead of firing its stale LWT later (#73).
+    client_id: str = ""
+    # Re-publish retained "online" at least this often while connected (#73).
+    announce_interval_s: int = 300
 
 
 @dataclass
@@ -318,6 +324,8 @@ def from_dict(data: dict[str, Any]) -> Config:
             base_topic=str(mqtt.get("base_topic", "ac_monitor")),
             discovery_prefix=str(mqtt.get("discovery_prefix", "homeassistant")),
             retain=bool(mqtt.get("retain", True)),
+            client_id=str(mqtt.get("client_id", "") or ""),
+            announce_interval_s=int(mqtt.get("announce_interval_s", Mqtt.announce_interval_s)),
         ),
         homeassistant=HomeAssistant(
             enabled=bool(hass.get("enabled", HomeAssistant.enabled)),
