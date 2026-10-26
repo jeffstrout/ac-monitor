@@ -10,7 +10,7 @@ Routes:
   GET  /healthz              deprecated alias for /api/health
   POST /api/toggle/display   flip display-push on/off
   POST /api/toggle/mqtt      flip MQTT output on/off
-  POST /api/mqtt/config      set broker host/port/user/pass
+  POST /api/mqtt/config      set broker host/port/user/pass and optional client_id
   POST /api/calibrate/capture  record a reading at a known temperature
   POST /api/calibrate/manual   set gain/offset directly
   POST /api/calibrate/reset    clear a channel's calibration
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 
@@ -33,6 +34,7 @@ from pydantic import BaseModel
 from .. import calibrate
 from ..config import Calibration
 from ..hat import HatBackend, HatError, IoplusBackend
+from ..mqtt_out import default_client_id
 from ..poller import poll_loop, poll_once
 from ..state import AppState
 from ..version import get_version
@@ -63,6 +65,11 @@ class MqttCfgReq(BaseModel):
     port: int | None = None
     username: str | None = None
     password: str | None = None
+    # Absent = unchanged; "" or null = reset to the default ac-monitor-<hostname>.
+    client_id: str | None = None
+
+
+_CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
 def _calibration_view(state: AppState) -> dict:
@@ -237,8 +244,22 @@ def create_app(state: AppState, backend: HatBackend | None = None) -> FastAPI:
             m.username = req.username
         if req.password is not None:
             m.password = req.password
+        if "client_id" in req.model_fields_set:
+            cid = (req.client_id or "").strip()
+            if cid and not _CLIENT_ID_RE.match(cid):
+                raise HTTPException(
+                    status_code=422,
+                    detail="client_id must be 1-64 chars of A-Z a-z 0-9 . _ - (or empty to reset)",
+                )
+            # The publisher notices the effective id changed on its next sync()
+            # and reconnects cleanly (offline → disconnect → connect → online).
+            m.client_id = cid
         state.persist()
-        return {"host": m.host, "port": m.port, "username": m.username, "enabled": m.enabled}
+        return {
+            "host": m.host, "port": m.port, "username": m.username, "enabled": m.enabled,
+            "client_id": m.client_id,
+            "effective_client_id": default_client_id(state.config),
+        }
 
     @app.post("/api/calibrate/capture", tags=["calibration"], summary="Capture a known-temperature point (°C)")
     def calibrate_capture(req: CaptureReq) -> dict:
