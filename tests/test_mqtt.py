@@ -284,3 +284,39 @@ def test_connack_refused_not_connected():
     pub.sync(st)
     assert pub.connected is False
     assert st.snapshot()["mqtt"]["connected"] is False
+
+
+def test_client_id_change_reconnects_cleanly():
+    """#75: changing mqtt.client_id while connected → offline, disconnect,
+    reconnect under the new id, online + discovery."""
+    clients, ids = [], []
+
+    def factory(cid):
+        ids.append(cid)
+        clients.append(FakeClient())
+        return clients[-1]
+
+    st = _state()
+    pub = mqtt_out.MqttPublisher(client_factory=factory)
+    pub.sync(st)
+    old = clients[0]
+    st.config.mqtt.client_id = "ac-monitor-pi"
+    pub.sync(st)
+
+    assert ids[-1] == "ac-monitor-pi" and len(clients) == 2
+    assert ("ac_monitor/status", "offline", True) in old.published
+    assert old.host is None and old.loop is False            # disconnected
+    new = clients[1]
+    assert ("ac_monitor/status", "online", True) in new.published
+    assert any(t.endswith("/config") for t, _, _ in new.published)
+    assert st.snapshot()["mqtt"]["client_id"] == "ac-monitor-pi"
+    assert pub.connected is True
+
+
+def test_unchanged_client_id_does_not_reconnect():
+    clients = []
+    st = _state()
+    pub = mqtt_out.MqttPublisher(client_factory=lambda cid: clients.append(FakeClient()) or clients[-1])
+    pub.sync(st)
+    pub.sync(st)
+    assert len(clients) == 1

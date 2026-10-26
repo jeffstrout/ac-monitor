@@ -109,3 +109,55 @@ def test_partial_sensor_loss_still_serves():
         assert s["health"]["output_air"] is False
         assert s["i2c_ok"] is True
         assert s["faults"]["sensor_fault"] is True
+
+
+# --- #75: client_id via POST /api/mqtt/config ---------------------------------
+
+def _mqtt_client(tmp_path):
+    cfg = cfgmod.from_dict(
+        {"units": {"temperature": "F"}, "poll": {"interval_s": 60}, "display": {"enabled": False}}
+    )
+    path = tmp_path / "config.yaml"
+    state = AppState(config=cfg, config_path=str(path))
+    return TestClient(create_app(state, MockBackend({1: 1.6, 2: 1.2, 3: 1.3, 4: 1.1}, {5: 1}))), state, path
+
+
+def test_mqtt_config_sets_and_persists_client_id(tmp_path):
+    c, state, path = _mqtt_client(tmp_path)
+    with c:
+        r = c.post("/api/mqtt/config", json={"client_id": "ac-monitor-pi"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["client_id"] == "ac-monitor-pi"
+        assert body["effective_client_id"] == "ac-monitor-pi"
+        assert "password" not in body
+    assert cfgmod.load(path).mqtt.client_id == "ac-monitor-pi"
+
+
+def test_mqtt_config_absent_client_id_unchanged(tmp_path):
+    c, state, _ = _mqtt_client(tmp_path)
+    state.config.mqtt.client_id = "keep-me"
+    with c:
+        r = c.post("/api/mqtt/config", json={"port": 1884})
+        assert r.status_code == 200 and r.json()["client_id"] == "keep-me"
+
+
+def test_mqtt_config_reset_client_id(tmp_path):
+    c, state, path = _mqtt_client(tmp_path)
+    with c:
+        for reset in ("", None):
+            state.config.mqtt.client_id = "ac-monitor-pi"
+            r = c.post("/api/mqtt/config", json={"client_id": reset})
+            assert r.status_code == 200
+            assert r.json()["client_id"] == ""
+            assert r.json()["effective_client_id"].startswith("ac-monitor-")
+    assert cfgmod.load(path).mqtt.client_id == ""
+
+
+def test_mqtt_config_rejects_bad_client_id(tmp_path):
+    c, state, _ = _mqtt_client(tmp_path)
+    with c:
+        for bad in ("has space", "a/b", "wild+", "hash#", "x" * 65, "ünï"):
+            r = c.post("/api/mqtt/config", json={"client_id": bad})
+            assert r.status_code == 422, bad
+    assert state.config.mqtt.client_id == ""
