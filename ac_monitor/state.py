@@ -28,6 +28,8 @@ class AppState:
     consecutive_errors: int = 0
     fan_debouncer: Debouncer | None = None
     last_display_push: float | None = None
+    # Written by MqttPublisher.sync(); surfaced in /api/state (no secrets).
+    mqtt_status: dict | None = None
     relay_selftest: dict | None = None       # latest relay↔opto loopback result
     ha: HaSource = field(default_factory=HaSource)
     # role -> list of (known_c, raw_c) calibration capture points.
@@ -80,6 +82,12 @@ class AppState:
                 "display_push": self.config.display.enabled,
                 "mqtt": self.config.mqtt.enabled,
                 "relay_test": self.config.relay_selftest.enabled,
+            },
+            "mqtt": self.mqtt_status or {
+                "enabled": self.config.mqtt.enabled,
+                "connected": False,
+                "client_id": None,
+                "last_announce_at": None,
             },
             "relay_selftest": self.relay_selftest,
             "last_poll_at": self.last_poll_at,

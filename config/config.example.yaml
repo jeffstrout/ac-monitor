@@ -76,6 +76,8 @@ mqtt:
   base_topic: "ac_monitor"
   discovery_prefix: "homeassistant"
   retain: true
+  client_id: ""             # empty = "ac-monitor-<hostname>"; keep stable across reboots
+  announce_interval_s: 300  # re-publish retained "online" this often while connected
 
 # The port the app listens on INSIDE the container. This is not the port you
 # browse to: deploy/docker-compose.yml publishes it on host port 80, so the
