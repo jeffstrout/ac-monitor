@@ -40,7 +40,8 @@ Obsolete reservations: `.16`, `.250`, and any doc that still names FlightAware a
 - **Web dashboard** — live readings in the browser
 - **Home Assistant** — auto-discovered sensors & binary sensors via MQTT, with a
   self-healing LWT/availability (stable client id, periodic + HA-birth re-announce;
-  connection state in `/api/state`)
+  connection state in `/api/state`; pin the client id with
+  `POST /api/mqtt/config {"client_id": "ac-monitor-pi"}`)
 - **Hands-off updates** — merge a PR and the Pi self-updates via GHCR + Watchtower ([details](docs/auto-update.md))
 
 Planned for a later phase: reading the thermostat's call-for-heat / call-for-cool / fan

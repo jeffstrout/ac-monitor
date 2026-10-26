@@ -24,6 +24,13 @@ The service publishes all readings to MQTT and registers itself with Home Assist
   retained LWT `offline` ~90 s *after* the new process announced `online`,
   leaving HA unavailable indefinitely (2026-10-25 incident, #73). With a stable
   id the broker takes the old session over at CONNECT time.
+  Set it remotely (#75) with `POST /api/mqtt/config` `{"client_id": "ac-monitor-pi"}`:
+  1–64 chars of `A-Z a-z 0-9 . _ -`; `""` or `null` resets to the default; omit
+  the field to leave it unchanged. It is persisted to `/data/config.yaml`, and if
+  MQTT is connected the publisher reconnects on the next poll (retained
+  `offline` → disconnect → connect with the new id → `online` + discovery).
+  Pin it in Docker: the default hostname is the container id, which changes on
+  every Watchtower recreate.
 - **Connection state** is tracked from `on_connect` / `on_disconnect` and exposed
   in `GET /api/state` as `mqtt: {enabled, connected, client_id, last_announce_at}`.
 - **Publishing:** a single retained JSON state message plus per-entity state topics
