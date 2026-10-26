@@ -160,6 +160,15 @@ class MqttPublisher:
 
     def sync(self, state) -> None:
         m = state.config.mqtt
+        if (
+            self.client is not None
+            and self.client_id is not None
+            and default_client_id(state.config) != self.client_id
+        ):
+            # client_id changed via the API (#75): reconnect cleanly under the
+            # new id. close() publishes retained offline and disconnects; the
+            # connect below announces online and resends discovery.
+            self.close()
         if m.enabled and self.client is None and m.host:
             self._connect(state.config)
         elif not m.enabled and self.client is not None:
