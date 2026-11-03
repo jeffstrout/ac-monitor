@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .config import Config
+from .config import Config, DeltaTThresholds
 from .hat import Readings
 
 FAULT_NAMES = (
     "sensor_fault",
     "no_airflow",             # airflow sensor reads idle (gated on airflow.enabled)
-    "airflow_mismatch",       # airflow demanded, blower not turning
+    "airflow_mismatch",       # airflow demanded, blower not turning, ΔT poor or missing
+    "airflow_switch_disagreement",  # switch open, but ΔT shows the coil is working
     "abnormal_delta_t",
     "delta_t_not_developing",  # running long enough to condition, and it isn't
     "wrong_direction",        # only detectable with authoritative demand
@@ -26,6 +27,8 @@ FAULT_NAMES = (
 # opposed to a sensor problem or a degraded data source. These are the ones that
 # take over system_status, because an operator glancing at the panel must not see
 # a confident "Cooling" on a system that is cooling nothing.
+# airflow_switch_disagreement is deliberately absent: ΔT already shows the coil
+# working, so the open switch is a sensor disagreement, not a dead blower.
 ERROR_FAULTS = ("airflow_mismatch", "delta_t_not_developing")
 
 # hvac_action values that should have the blower turning. Not just heating and
@@ -58,6 +61,25 @@ class Derived:
     @property
     def any_fault(self) -> bool:
         return any(self.faults.values())
+
+
+def _delta_t_proves_airflow(
+    demand: str | None, delta_f: float | None, th: DeltaTThresholds
+) -> bool:
+    """True when ΔT is healthy enough that an open switch is the sensor.
+
+    Only a heat or cool call has a conditioning split to trust. A fan-only
+    call, or a missing air probe, returns False and the no-airflow error
+    stands. Cooling ΔT is return − supply (positive). Heating is that same
+    quantity, negative — the develop thresholds use this sign, and so do these.
+    """
+    if delta_f is None:
+        return False
+    if demand == "cooling":
+        return delta_f >= th.cooling_airflow_healthy_f
+    if demand == "heating":
+        return delta_f <= th.heating_airflow_healthy_f
+    return False
 
 
 def compute(
@@ -159,6 +181,11 @@ def compute(
 
     # Airflow demanded and the blower isn't turning. `is False` deliberately —
     # a failed opto read is None, and that is a sensor_fault, not an HVAC fault.
+    # A heat/cool call whose ΔT is already healthy is the exception: the switch
+    # often fails to close on a cooling start from idle while the coil is
+    # clearly working (~20 °F). That is a disagreement, not SYSTEM ERROR. Poor
+    # or missing ΔT keeps the error — a blower we cannot see in the temperatures
+    # is still a blower we will not vouch for.
     if cfg.airflow.enabled and have_demand and demand_for_s is not None:
         airflow_demanded = demand in AIRFLOW_ACTIONS or fan_mode == "on"
         if (
@@ -166,7 +193,10 @@ def compute(
             and readings.fan_running is False
             and demand_for_s >= cfg.airflow.prove_after_s
         ):
-            faults["airflow_mismatch"] = True
+            if _delta_t_proves_airflow(demand, delta_f, th):
+                faults["airflow_switch_disagreement"] = True
+            else:
+                faults["airflow_mismatch"] = True
 
     # Called for heat or cool, running long enough to have done something, and ΔT
     # has not developed. The failure a healthy-looking system hides in: thermostat
