@@ -25,6 +25,7 @@ FAULT_LABELS = {
     "sensor_fault": "Sensor Fault",
     "no_airflow": "No-Airflow Fault",
     "airflow_mismatch": "Airflow Mismatch",
+    "airflow_switch_disagreement": "Airflow Switch Disagreement",
     "abnormal_delta_t": "Abnormal ΔT",
     "delta_t_not_developing": "ΔT Not Developing",
     "wrong_direction": "Wrong Direction",

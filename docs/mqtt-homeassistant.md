@@ -65,6 +65,7 @@ ac_monitor/
 | Airflow | binary_sensor | `airflow` | `running` / `moving` |
 | No-Airflow Fault | binary_sensor | `derived/fault/no_airflow` | `problem` |
 | Airflow Mismatch | binary_sensor | `derived/fault/airflow_mismatch` | `problem` |
+| Airflow Switch Disagreement | binary_sensor | `derived/fault/airflow_switch_disagreement` | `problem` |
 | Abnormal ΔT | binary_sensor | `derived/fault/abnormal_delta_t` | `problem` |
 | ΔT Not Developing | binary_sensor | `derived/fault/delta_t_not_developing` | `problem` |
 | Wrong Direction | binary_sensor | `derived/fault/wrong_direction` | `problem` |
@@ -75,6 +76,13 @@ ac_monitor/
 notification: both mean the equipment is running and not delivering, and both
 also drive `system_status` to `Error` on the dashboard. See
 [ha-mode-source.md](ha-mode-source.md#faults).
+
+**Airflow Switch Disagreement** is not that alert. It is on when a cooling or
+heating call has run past `airflow.prove_after_s`, OPTO-5 is still open, and ΔT
+is healthy (cooling ≥ `cooling_airflow_healthy_f`, default +14 °F; heating ≤
+`heating_airflow_healthy_f`, default −20 °F, i.e. 20 °F of rise). The switch
+disagrees with the temperatures. `system_status` stays Cooling or Heating. A
+poor or missing ΔT stays on **Airflow Mismatch**.
 
 *(Thermostat call binary sensors — Heat/Cool/Fan — get added when that phase lands.)*
 

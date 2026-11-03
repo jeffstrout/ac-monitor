@@ -93,6 +93,24 @@ class DeltaTThresholds:
     cooling_develop_f: float = 10.0
     heating_develop_f: float = -20.0
     develop_after_s: float = 120.0
+    # "Does ΔT prove air is moving?" Past airflow.prove_after_s, an open OPTO-5
+    # during a heat/cool call is a SYSTEM ERROR (airflow_mismatch) only when ΔT
+    # is short of these floors or the air probes are missing. The pressure
+    # switch often fails to close on a cooling start from idle while ΔT is
+    # ~20 °F, and a dead blower cannot hold a split like that. Same sign
+    # convention as the develop thresholds: cooling is a floor on a positive
+    # ΔT (return − supply), heating a ceiling on a negative one.
+    #
+    # 14 °F sits between the normal cooling floor (cooling_min_f, 15) and the
+    # "not delivering" floor (cooling_develop_f, 10): near enough to a normal
+    # split to trust over a sticky switch, far enough above "the coil is doing
+    # nothing" that a real no-airflow still becomes Error. Heating reuses the
+    # commissioned develop line, 20 °F of rise (ΔT ≤ −20): the rise that means
+    # the exchanger is delivering also proves air is crossing it. There is no
+    # upper cap — an excessive split is already abnormal_delta_t, and the
+    # dead-blower failure collapses ΔT toward zero, which the floor catches.
+    cooling_airflow_healthy_f: float = 14.0
+    heating_airflow_healthy_f: float = -20.0
 
 
 @dataclass
@@ -307,6 +325,18 @@ def from_dict(data: dict[str, Any]) -> Config:
                 develop_after_s=float(
                     thresh.get("develop_after_s", DeltaTThresholds.develop_after_s)
                 ),
+                cooling_airflow_healthy_f=float(
+                    thresh.get(
+                        "cooling_airflow_healthy_f",
+                        DeltaTThresholds.cooling_airflow_healthy_f,
+                    )
+                ),
+                heating_airflow_healthy_f=float(
+                    thresh.get(
+                        "heating_airflow_healthy_f",
+                        DeltaTThresholds.heating_airflow_healthy_f,
+                    )
+                ),
             )
         ),
         display=Display(
@@ -425,6 +455,16 @@ def validate(cfg: Config) -> None:
         raise ConfigError("thresholds.delta_t.heating_develop_f must be < 0 (heating ΔT is negative)")
     if dt.develop_after_s <= 0:
         raise ConfigError("thresholds.delta_t.develop_after_s must be > 0")
+    # Same sign rule as the develop thresholds. A flipped sign would treat a
+    # coil that is doing nothing as proof the blower is fine.
+    if dt.cooling_airflow_healthy_f <= 0:
+        raise ConfigError(
+            "thresholds.delta_t.cooling_airflow_healthy_f must be > 0 (cooling ΔT is positive)"
+        )
+    if dt.heating_airflow_healthy_f >= 0:
+        raise ConfigError(
+            "thresholds.delta_t.heating_airflow_healthy_f must be < 0 (heating ΔT is negative)"
+        )
     if cfg.airflow.prove_after_s < 0:
         raise ConfigError("airflow.prove_after_s must be >= 0")
 

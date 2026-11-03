@@ -32,6 +32,8 @@ def test_discovery_messages():
     assert any(t.endswith("/sensor/ac_monitor/delta_t/config") for t in topics)
     assert any(t.endswith("/binary_sensor/ac_monitor/airflow/config") for t in topics)
     assert any(t.endswith("/binary_sensor/ac_monitor/no_airflow/config") for t in topics)
+    disagree = next(p for t, p, _ in msgs if t.endswith("/airflow_switch_disagreement/config"))
+    assert json.loads(disagree)["name"] == "Airflow Switch Disagreement"
     assert all(retain for _, _, retain in msgs)                       # discovery is retained
     payload = json.loads(next(p for t, p, _ in msgs if "input_air" in t))
     assert payload["device_class"] == "temperature"

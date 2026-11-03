@@ -331,3 +331,134 @@ def test_error_status_does_not_disturb_the_reported_mode():
     assert d.system_status == "Error"
     assert d.mode == "cooling"
     assert d.mode_source == "home_assistant"
+
+
+# --- open switch, but ΔT shows the coil working (issue #77) ------------------
+#
+# OPTO-5 often fails to close on a cooling start from idle. Past prove_after_s
+# that used to become SYSTEM ERROR even at ~20 °F of split. A healthy split
+# (cooling ≥ +14 °F, heating ≤ −20 °F) is a disagreement, not an error. Poor
+# or missing ΔT still is. All of these are past the 60 s prove window and
+# short of the 120 s develop window, so the only Error in play is airflow.
+
+def _call(input_c, output_c, demand, *, seconds=GRACE, cfg=CFG_HA, fan_mode=None):
+    return derive.compute(
+        _readings(input_c, output_c, fan=False),
+        cfg,
+        demand=demand,
+        fan_mode=fan_mode,
+        demand_for_s=seconds,
+    )
+
+
+def test_healthy_cooling_with_no_airflow_is_not_a_system_error():
+    """Return − supply = 18 °F, inside the 15–22 band. The field false alarm is ~20 °F."""
+    d = _call(25, 15, "cooling")  # ΔT +18 °F
+
+    assert d.faults["airflow_mismatch"] is False
+    assert d.system_status == "Cooling"
+    assert d.faults["airflow_switch_disagreement"] is True
+    # The switch still reads open. That stays visible; it just is not SYSTEM ERROR.
+    assert d.faults["no_airflow"] is True
+    assert d.mode == "cooling"
+
+
+def test_cooling_at_the_healthy_floor_is_not_a_system_error():
+    """Exactly +14 °F counts. It is under the 15 °F normal floor, and that is intentional."""
+    d = _call(25, 25 - 14 * 5 / 9, "cooling")  # ΔT = +14 °F
+
+    assert d.faults["airflow_mismatch"] is False
+    assert d.faults["airflow_switch_disagreement"] is True
+    assert d.system_status == "Cooling"
+    # 14 °F is outside 15–22, so the split is still abnormal. That is not an Error.
+    assert d.faults["abnormal_delta_t"] is True
+
+
+def test_poor_cooling_delta_t_with_no_airflow_is_still_an_error():
+    """+13 °F has cleared the +10 develop floor and still does not prove airflow."""
+    d = _call(25, 25 - 13 * 5 / 9, "cooling")  # ΔT = +13 °F
+
+    assert d.faults["airflow_mismatch"] is True
+    assert d.faults["airflow_switch_disagreement"] is False
+    assert d.faults["delta_t_not_developing"] is False
+    assert d.system_status == "Error"
+
+
+def test_healthy_heating_with_no_airflow_is_not_a_system_error():
+    """Supply − return = 27 °F (ΔT −27 °F), past the −20 °F ceiling and inside 25–70."""
+    d = _call(20, 35, "heating")
+
+    assert d.faults["airflow_mismatch"] is False
+    assert d.faults["airflow_switch_disagreement"] is True
+    assert d.system_status == "Heating"
+    assert d.faults["no_airflow"] is True
+
+
+def test_heating_at_the_healthy_ceiling_is_not_a_system_error():
+    """Exactly 20 °F of rise (ΔT −20 °F) is the commissioned develop line, and it counts."""
+    d = _call(20, 20 + 20 * 5 / 9, "heating")  # ΔT = −20 °F
+
+    assert d.faults["airflow_mismatch"] is False
+    assert d.faults["airflow_switch_disagreement"] is True
+    assert d.system_status == "Heating"
+
+
+def test_poor_heating_delta_t_with_no_airflow_is_still_an_error():
+    """18 °F of rise (ΔT −18 °F) is short of 20. The open switch stays an error."""
+    d = _call(20, 30, "heating")  # ΔT = −18 °F
+
+    assert d.faults["airflow_mismatch"] is True
+    assert d.faults["airflow_switch_disagreement"] is False
+    assert d.system_status == "Error"
+
+
+def test_missing_delta_t_keeps_the_no_airflow_error():
+    """No air temperatures means we cannot call the switch a liar."""
+    d = _call(None, None, "cooling")
+
+    assert d.faults["airflow_mismatch"] is True
+    assert d.faults["airflow_switch_disagreement"] is False
+    assert d.system_status == "Error"
+
+    # One probe is enough to make ΔT unavailable.
+    d = _call(25, None, "heating")
+    assert d.faults["airflow_mismatch"] is True
+    assert d.faults["airflow_switch_disagreement"] is False
+    assert d.system_status == "Error"
+
+
+def test_switch_disagreement_waits_out_the_prove_window():
+    """A healthy split during spin-up is not yet a warning or an error."""
+    d = _call(25, 15, "cooling", seconds=5.0)
+
+    assert d.faults["airflow_mismatch"] is False
+    assert d.faults["airflow_switch_disagreement"] is False
+    assert d.system_status == "Cooling"
+
+
+def test_fan_only_call_is_not_excused_by_a_healthy_split():
+    """No heat/cool call means there is no conditioning ΔT to trust."""
+    d = _call(25, 15, "fan")  # +18 °F left over, but the call is fan-only
+
+    assert d.faults["airflow_mismatch"] is True
+    assert d.faults["airflow_switch_disagreement"] is False
+    assert d.system_status == "Error"
+
+    d = _call(25, 15, "idle", fan_mode="on")
+    assert d.faults["airflow_mismatch"] is True
+    assert d.system_status == "Error"
+
+
+def test_healthy_floor_is_configurable():
+    """18 °F excuses the switch at the default floor of 14, and not at a floor of 20."""
+    cfg = cfgmod.from_dict(
+        {
+            "homeassistant": {"enabled": True, "token": "t", "base_url": "http://ha"},
+            "thresholds": {"delta_t": {"cooling_airflow_healthy_f": 20}},
+        }
+    )
+    d = _call(25, 15, "cooling", cfg=cfg)  # ΔT +18 °F
+
+    assert d.faults["airflow_mismatch"] is True
+    assert d.faults["airflow_switch_disagreement"] is False
+    assert d.system_status == "Error"

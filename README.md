@@ -7,7 +7,7 @@ everything to **Home Assistant** over MQTT.
 
 > **Status:** ✅ Running. The poller, web control panel, calibration editor, MQTT/Home
 > Assistant integration, and split-flap display push are all implemented, with a
-> 152-test suite. Deployed to the Pi via GHCR + Watchtower — see
+> 179-test suite. Deployed to the Pi via GHCR + Watchtower — see
 > [docs/auto-update.md](docs/auto-update.md). Remaining work is tracked in
 > [issues](https://github.com/jeffstrout/ac-monitor/issues); the longer-range
 > roadmap is in [docs/roadmap.md](docs/roadmap.md).
@@ -36,7 +36,11 @@ Obsolete reservations: `.16`, `.250`, and any doc that still names FlightAware a
 - **Airflow proof** (diaphragm pressure switch) — confirms air is actually moving in the duct
 - **Derived metrics** — air-side ΔT (input − output) and refrigerant line temps
 - **"Running but not delivering" faults** — the thermostat calls, and either the blower
-  never turns or ΔT never develops; both escalate the status to **Error**
+  never turns or ΔT never develops; both escalate the status to **Error**. A heat or
+  cool call whose ΔT is already healthy (cooling ≥ 14 °F, heating rise ≥ 20 °F) does
+  not: an open pressure switch then is a warning (`airflow_switch_disagreement`),
+  because the switch often fails to close on a cooling start while the coil is working.
+  Poor or missing ΔT still escalates. See [docs/ha-mode-source.md](docs/ha-mode-source.md#faults).
 - **Web dashboard** — live readings in the browser
 - **Home Assistant** — auto-discovered sensors & binary sensors via MQTT, with a
   self-healing LWT/availability (stable client id, periodic + HA-birth re-announce;
@@ -96,9 +100,12 @@ discards capture points that cannot be reconstructed from the API.
 > `/data/config.yaml` on the `ac-monitor-data` volume, and a value present there
 > wins over the dataclass default in `ac_monitor/config.py`. So changing a
 > default in this repo only affects *fresh* installs — an existing appliance
-> keeps whatever it persisted until you edit that file and restart. This is how
-> the split-flap push kept pointing at a dead `:8080` after the display moved to
-> port 80:
+> keeps whatever it persisted until you edit that file and restart. Keys
+> absent from that file still pick up the current default, which is how the
+> healthy-ΔT floors (`cooling_airflow_healthy_f` 14, `heating_airflow_healthy_f`
+> -20) apply on upgrade without an edit. The split-flap push kept pointing at
+> a dead `:8080` after the display moved to port 80 because that old URL was
+> already written in the file:
 >
 > ```bash
 > sudo docker exec ac-monitor python -c "import pathlib;p=pathlib.Path('/data/config.yaml');s=p.read_text();p.write_text(s.replace('OLD','NEW'))"

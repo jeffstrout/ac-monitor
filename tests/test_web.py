@@ -101,6 +101,14 @@ def test_dashboard_served():
         assert "/api/state" in r.text   # the page fetches state
 
 
+def test_dashboard_warns_when_the_switch_disagrees_with_delta_t():
+    """The page must be able to say the switch is open while ΔT shows air moving."""
+    with _client() as c:
+        html = c.get("/").text
+    assert "airflow_switch_disagreement" in html
+    assert "pressure switch open, ΔT shows air is moving" in html
+
+
 def test_partial_sensor_loss_still_serves():
     # Only AD2 connected (like the current bench) — others FAIL but API stays up.
     with _client(adc={2: 1.315}, opto={5: 1}) as c:

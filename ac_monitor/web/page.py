@@ -181,9 +181,13 @@ async function refresh(){
  // not the accent blue it used to be: a status pill must never look like a
  // button (homelab-standards#4).
  // "Error" is the one exception: the equipment is running and not delivering
- // (no airflow on a call, or ΔT that never developed), which IS health.
+ // (no airflow on a call with poor or missing ΔT, or ΔT that never developed),
+ // which IS health. An open switch that disagrees with a healthy ΔT is a
+ // warning, not that error: the coil is working, the pressure switch did not
+ // close (#77).
+ const switchDisagree = !!(s.faults && s.faults.airflow_switch_disagreement);
  sysStatus.className = 'hl-pill hl-pill--'+(
-   s.system_status==='Error'?'crit':(s.mode_source==='unavailable'?'warn':'info'));
+   s.system_status==='Error'?'crit':(switchDisagree||s.mode_source==='unavailable'?'warn':'info'));
  // Health is the bus plus any active fault — NOT system_status, which is only
  // the operating mode (Cooling/Heating/Fan/Idle) and is never itself a problem.
  const activeFaults=Object.entries(s.faults).filter(([k,v])=>v).map(([k])=>k);
@@ -199,6 +203,7 @@ async function refresh(){
  bus.innerHTML = s.i2c_ok?'<span class=ok>OK</span>':'<span class=fault>DOWN</span>';
  faults.innerHTML = activeFaults.length
    ? '<span class=fault>Faults: '+activeFaults.join(', ')+'</span>'
+     +(switchDisagree?' <span class=muted>— pressure switch open, ΔT shows air is moving</span>':'')
    : '<span class=ok>No faults</span>';
  pill(displayState,s.toggles.display_push); pill(mqttState,s.toggles.mqtt);
  const t=s.last_poll_at?new Date(s.last_poll_at*1000).toLocaleTimeString():'–';
