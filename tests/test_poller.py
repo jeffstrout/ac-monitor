@@ -55,13 +55,31 @@ def _cfg(**over):
 
 
 def test_poll_once_reports_error_when_a_call_is_active_and_air_is_not_moving():
+    # Supply and return nearly equal: ΔT ~ 0 °F, below the +14 °F healthy floor,
+    # so an open switch on a cooling call is still a real no-airflow error.
+    st = AppState(config=_cfg(), ha=_FrozenHa("cooling"))
+    poll_once(st, _Backend(opto=0, adc={1: 1.20, 2: 1.21, 3: 1.30, 4: 1.10}))
+
+    assert st.readings.fan_running is False
+    assert st.readings.delta_t == -0.5
+    assert st.derived.faults["airflow_mismatch"] is True
+    assert st.derived.faults["airflow_switch_disagreement"] is False
+    assert st.derived.system_status == "Error"
+    assert st.snapshot()["system_status"] == "Error"
+
+
+def test_poll_once_does_not_raise_system_error_when_cooling_delta_t_is_healthy():
+    """The default fixture split is +20.4 °F. OPTO-5 open is the switch, not the blower."""
     st = AppState(config=_cfg(), ha=_FrozenHa("cooling"))
     poll_once(st, _Backend(opto=0))
 
     assert st.readings.fan_running is False
-    assert st.derived.faults["airflow_mismatch"] is True
-    assert st.derived.system_status == "Error"
-    assert st.snapshot()["system_status"] == "Error"
+    assert st.readings.delta_t == 20.4
+    assert st.derived.faults["airflow_mismatch"] is False
+    assert st.derived.faults["airflow_switch_disagreement"] is True
+    assert st.derived.system_status == "Cooling"
+    assert st.snapshot()["system_status"] == "Cooling"
+    assert st.snapshot()["faults"]["airflow_switch_disagreement"] is True
 
 
 def test_poll_once_passes_the_thermostats_fan_mode_through():

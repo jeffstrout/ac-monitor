@@ -55,6 +55,33 @@ def test_develop_thresholds_round_trip(tmp_path):
     assert back.airflow.prove_after_s == 45.0
 
 
+def test_airflow_healthy_floors_default_and_round_trip(tmp_path):
+    dt = cfgmod.from_dict({}).thresholds.delta_t
+    assert dt.cooling_airflow_healthy_f == 14.0
+    assert dt.heating_airflow_healthy_f == -20.0
+
+    cfg = cfgmod.from_dict(
+        {"thresholds": {"delta_t": {
+            "cooling_airflow_healthy_f": 16,
+            "heating_airflow_healthy_f": -25,
+        }}}
+    )
+    p = tmp_path / "config.yaml"
+    cfgmod.save(cfg, p)
+    back = cfgmod.load(p)
+
+    assert back.thresholds.delta_t.cooling_airflow_healthy_f == 16.0
+    assert back.thresholds.delta_t.heating_airflow_healthy_f == -25.0
+
+
+def test_airflow_healthy_floor_signs_are_enforced():
+    """A flipped sign would treat a coil that is doing nothing as proof of airflow."""
+    with pytest.raises(ConfigError, match="cooling_airflow_healthy_f"):
+        cfgmod.from_dict({"thresholds": {"delta_t": {"cooling_airflow_healthy_f": -14}}})
+    with pytest.raises(ConfigError, match="heating_airflow_healthy_f"):
+        cfgmod.from_dict({"thresholds": {"delta_t": {"heating_airflow_healthy_f": 20}}})
+
+
 def test_develop_threshold_signs_are_enforced():
     """A sign error would invert the check silently — a system delivering nothing
     would read as healthy."""
