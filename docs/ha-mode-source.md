@@ -207,17 +207,42 @@ its band from **demand** rather than from the sign of ΔT.
 | `sensor_fault` | any channel unreadable | unchanged |
 | `no_airflow` | airflow switch open past debounce | ✅ live again (2026-07-31) |
 | `abnormal_delta_t` | ΔT outside the band **for the demanded mode** | no longer circular; **gated on demand** |
-| **`airflow_mismatch`** | airflow demanded and the switch reads open, past `airflow.prove_after_s` | ✅ shipped (#64) |
+| **`airflow_mismatch`** | airflow demanded, switch open past `airflow.prove_after_s`, and ΔT is poor or missing | ✅ shipped (#64); healthy-ΔT exemption (#77) |
+| **`airflow_switch_disagreement`** | cooling or heating call, switch open past `prove_after_s`, and ΔT is healthy | warning only — does **not** set `system_status` to Error (#77) |
 | **`delta_t_not_developing`** | heat/cool call has run `develop_after_s` and ΔT never reached the develop threshold | ✅ shipped (#64) |
 | **`wrong_direction`** | demand cooling but ΔT heating, or vice versa | only detectable with authoritative demand |
 | **`ha_unavailable`** | HA enabled but unreachable or stale | degraded, not broken |
 
-The last two rows of the "shipped" block are the only faults that also change
-`system_status` — to `"Error"`. They mean *the equipment is running and failing
-to do its job*, which no other fault means, and a panel reading a confident
-"Cooling" over a system cooling nothing is the failure mode worth shouting about.
-`mode`, `mode_source` and the HA block in `/api/state` are untouched by the
-escalation: the thermostat's reported action still reads exactly as it does now.
+`airflow_mismatch` and `delta_t_not_developing` are the only faults that also
+change `system_status` — to `"Error"`. They mean *the equipment is running and
+failing to do its job*, which no other fault means, and a panel reading a
+confident "Cooling" over a system cooling nothing is the failure mode worth
+shouting about. `mode`, `mode_source` and the HA block in `/api/state` are
+untouched by the escalation: the thermostat's reported action still reads
+exactly as it does now.
+
+`airflow_switch_disagreement` is the case that looks like `airflow_mismatch`
+and is not. The OPTO-5 diaphragm switch often fails to close on a cooling start
+from idle while air-side ΔT is about 20 °F, inside the normal cooling band. A
+dead blower cannot hold a split like that — supply collapses toward return — so
+a healthy ΔT means the switch is the thing that failed. The fault stays on (the
+dashboard paints the status pill as a warning and says the switch is open while
+ΔT shows air moving; MQTT publishes the binary sensor) and `system_status`
+stays Cooling or Heating, so the split-flap does not read `SYSTEM ERROR`.
+
+The floors live next to the develop thresholds and use the same sign. ΔT is
+`input_air − output_air` (return − supply), in °F:
+
+| Demand | ΔT proves airflow when | Default | Why this number |
+|---|---|---|---|
+| `cooling` | ≥ `cooling_airflow_healthy_f` | **+14 °F** | Between the normal floor (`cooling_min_f` 15) and the "not delivering" floor (`cooling_develop_f` 10). A start a degree under "in band" is still real cooling. Under 14 °F — including a split that has cleared +10 and so would not trip `delta_t_not_developing` — the open switch stays `Error`. |
+| `heating` | ≤ `heating_airflow_healthy_f` | **−20 °F** (20 °F of rise) | The commissioned develop line. The rise that means the exchanger is delivering is the rise that proves air is crossing it. The normal heating band starts at 25 °F; a smaller rise keeps the error. |
+
+There is no upper cap. An excessive split is already `abnormal_delta_t`. The
+failure this error exists for is a split that never leaves zero. Fan-only
+demand and `fan_mode: "on"` with no heat/cool call are not excused: they have
+no conditioning ΔT to trust. A missing air probe is not excused either. The
+warning uses the same `prove_after_s` window as the error, so spin-up is quiet.
 
 **`delta_t_not_developing` thresholds** (commissioned 2026-07-31, all
 configurable under `thresholds.delta_t`):
@@ -339,6 +364,8 @@ thresholds:
     cooling_develop_f: 10                 # ΔT must reach at least this on cool
     heating_develop_f: -20                # ...and at most this on heat
     develop_after_s: 120                  # before either is judged
+    cooling_airflow_healthy_f: 14         # at/above this, an open switch is not Error
+    heating_airflow_healthy_f: -20        # heating ΔT at/below this (20 °F of rise)
 ```
 
 **`token` is a secret.** It must be redacted by `GET /api/config` (#43) and must
@@ -396,6 +423,10 @@ into the `airflow_mismatch` condition above.)*
 default — measured from the last `hvac_action` change rather than counting polls.
 A furnace delays its own blower 30-90 s while the heat exchanger warms, so
 alerting immediately would fault every normal cycle.)*
+
+*(Resolved 2026-11-03, #77: a cooling or heating call with a healthy ΔT does not
+escalate an open switch to `Error`. The switch disagrees with ΔT
+(`airflow_switch_disagreement`); poor or missing ΔT still does.)*
 
 - If HA is unavailable for a long period, should `ha_unavailable` escalate, or
   stay a quiet degraded state? It is not an HVAC fault.

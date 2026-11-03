@@ -84,6 +84,14 @@ SystemState    = {
   - `abnormal_delta_t` — ΔT outside a configurable heating/cooling band (e.g. cooling ΔT
     should be ~15–22 °F; too low → low charge/airflow, too high → restricted airflow).
   - `sensor_fault` — any thermistor/HAT read failing.
+  - `airflow_mismatch` — heat, cool, or fan demanded, the pressure switch still open
+    after `airflow.prove_after_s`, and ΔT is poor or missing. Sets `system_status` to
+    `Error` (split-flap `SYSTEM ERROR`).
+  - `airflow_switch_disagreement` — a cooling or heating call, switch still open after
+    the prove window, but ΔT is healthy (`cooling_airflow_healthy_f` /
+    `heating_airflow_healthy_f`, default +14 °F and −20 °F). Not an Error. The switch
+    disagrees with the air temperatures; the coil is working. Fan-only calls are not
+    excused — they have no conditioning split to trust.
 
 > **Filter loading** was previously derived from a differential-pressure sensor (Setra 265),
 > now dropped from the design. It could be reintroduced later — a supply/return air-temp
